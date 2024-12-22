@@ -12,7 +12,7 @@ Features:
 7. 支持显示节点延迟、抖动和丢包率
 8. 支持调试模式查看详细的解锁测试信息
 9. 支持自定义并发数，提高测试效率
-10.在开启 -unlock 模式下，将跳过上传速度和下载速度测试
+10. 在开启 -unlock 模式下，将跳过上传速度和下载速度测试
 
 <img width="1332" alt="image" src="https://github.com/user-attachments/assets/fdc47ec5-b626-45a3-a38a-6d88c326c588">
 
