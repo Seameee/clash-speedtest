@@ -162,7 +162,7 @@ func printResults(results []*speedtester.Result, enableUnlock bool) {
 		if unlock == "N/A" {
 			return unlock
 		}
-		// 每4个��台换一行
+		// 每4个流媒体平台换一行
 		parts := strings.Split(unlock, ", ")
 		var lines []string
 		for i := 0; i < len(parts); i += 4 {
