@@ -246,7 +246,7 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 
 	client := st.createClient(proxy)
 
-	// 2. 如果启用了解锁检测，进行地理位置和流媒体检测
+	// 2. 如果启用了解锁检测，进行地理位置和流媒体检测。
 	if st.config.EnableUnlock {
 		location, err := st.testLocation(client)
 		if err == nil {
