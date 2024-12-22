@@ -8,7 +8,7 @@ import (
 
 type IPSBResponse struct {
 	Country string `json:"country"`
-	City    string `json:"ip"`
+	City    string `json:"city"`
 }
 
 func GetLocation(client *http.Client) (string, error) {
