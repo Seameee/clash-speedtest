@@ -2,6 +2,7 @@ package speedtester
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -14,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/faceair/clash-speedtest/unlock"
 	"github.com/metacubex/mihomo/adapter"
 	"github.com/metacubex/mihomo/adapter/provider"
 	"github.com/metacubex/mihomo/constant"
@@ -22,13 +24,16 @@ import (
 )
 
 type Config struct {
-	ConfigPaths  string
-	FilterRegex  string
-	ServerURL    string
-	DownloadSize int
-	UploadSize   int
-	Timeout      time.Duration
-	Concurrent   int
+	ConfigPaths      string
+	FilterRegex      string
+	ServerURL        string
+	DownloadSize     int
+	UploadSize       int
+	Timeout          time.Duration
+	Concurrent       int
+	EnableUnlock     bool
+	UnlockConcurrent int
+	DebugMode        bool
 }
 
 type SpeedTester struct {
@@ -166,6 +171,8 @@ type Result struct {
 	UploadSize    float64        `json:"upload_size"`
 	UploadTime    time.Duration  `json:"upload_time"`
 	UploadSpeed   float64        `json:"upload_speed"`
+	Location      string         `json:"location"`
+	StreamUnlock  string         `json:"stream_unlock"`
 }
 
 func (r *Result) FormatDownloadSpeed() string {
@@ -194,6 +201,20 @@ func (r *Result) FormatUploadSpeed() string {
 	return formatSpeed(r.UploadSpeed)
 }
 
+func (r *Result) FormatLocation() string {
+	if r.Location == "" {
+		return "N/A"
+	}
+	return r.Location
+}
+
+func (r *Result) FormatStreamUnlock() string {
+	if r.StreamUnlock == "" {
+		return "N/A"
+	}
+	return r.StreamUnlock
+}
+
 func formatSpeed(bytesPerSecond float64) string {
 	units := []string{"B/s", "KB/s", "MB/s", "GB/s", "TB/s"}
 	unit := 0
@@ -218,12 +239,26 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 	result.Jitter = latencyResult.jitter
 	result.PacketLoss = latencyResult.packetLoss
 
-	// 如果延迟测试完全失败，直接返回
-	if result.PacketLoss == 100 {
+	// 如果延迟测试失败（延迟为0或丢包率为100%），直接返回结果
+	if result.Latency == 0 || result.PacketLoss == 100 {
 		return result
 	}
 
-	// 2. 并发进行下载和上传测试
+	client := st.createClient(proxy)
+
+	// 2. 如果启用了解锁检测，进行地理位置和流媒体检测
+	if st.config.EnableUnlock {
+		location, err := st.testLocation(client)
+		if err == nil {
+			result.Location = location
+		}
+
+		// 进行流媒体解锁测试
+		result.StreamUnlock = unlock.TestAll(client, st.config.UnlockConcurrent, st.config.DebugMode)
+		return result
+	}
+
+	// 3. 并发进行下载和上传测试
 	var wg sync.WaitGroup
 	downloadResults := make(chan *downloadResult, st.config.Concurrent)
 
@@ -253,7 +288,7 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 	}
 	wg.Wait()
 
-	// 3. 汇总结果
+	// 4. 汇总结果
 	var totalDownloadBytes, totalUploadBytes int64
 	var totalDownloadTime, totalUploadTime time.Duration
 	var downloadCount, uploadCount int
@@ -288,6 +323,40 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 	}
 
 	return result
+}
+
+func (st *SpeedTester) testLocation(client *http.Client) (string, error) {
+	req, err := http.NewRequest("GET", "https://api.ip.sb/geoip", nil)
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	var result struct {
+		Country string `json:"country"`
+		City    string `json:"city"`
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", err
+	}
+
+	if result.Country != "" {
+		return result.Country, nil
+	}
+	return result.City, nil
 }
 
 type latencyResult struct {
@@ -421,4 +490,9 @@ func calculateLatencyStats(latencies []time.Duration, failedPings int) *latencyR
 	result.jitter = time.Duration(math.Sqrt(variance))
 
 	return result
+}
+
+func (st *SpeedTester) testStreamUnlock(proxy *CProxy) (string, error) {
+	client := st.createClient(proxy)
+	return unlock.TestAll(client, st.config.UnlockConcurrent, st.config.DebugMode), nil
 }
