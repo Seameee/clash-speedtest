@@ -25,6 +25,7 @@ Features:
 ```bash
 # 支持从源码安装，或从 Release 里下载由 Github Action 自动构建的二进制文件
 > go install github.com/faceair/clash-speedtest
+> go install github.com/OP404OP/clash-speedtest (二次修改)
 
 # 查看帮助
 > clash-speedtest -h
