@@ -29,6 +29,7 @@ var (
 	enableUnlock      = flag.Bool("unlock", false, "enable streaming media unlock detection")
 	unlockConcurrent  = flag.Int("unlock-concurrent", 5, "concurrent size for unlock testing")
 	debugMode         = flag.Bool("debug", false, "enable debug mode for unlock testing")
+	enableRisk        = flag.Bool("risk", false, "enable IP risk checking when unlock testing is enabled")
 )
 
 const (
@@ -64,6 +65,7 @@ func main() {
 		EnableUnlock:     *enableUnlock,
 		UnlockConcurrent: *unlockConcurrent,
 		DebugMode:        *debugMode,
+		EnableRisk:       *enableRisk,
 	})
 
 	allProxies, err := speedTester.LoadProxies()
@@ -162,7 +164,7 @@ func printResults(results []*speedtester.Result, enableUnlock bool) {
 		if unlock == "N/A" {
 			return unlock
 		}
-		// 每4个流媒体平台换一行
+		// 每4个台换一行
 		parts := strings.Split(unlock, ", ")
 		var lines []string
 		for i := 0; i < len(parts); i += 4 {
