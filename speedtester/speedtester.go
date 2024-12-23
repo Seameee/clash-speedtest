@@ -2,7 +2,6 @@ package speedtester
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -34,6 +33,7 @@ type Config struct {
 	EnableUnlock     bool
 	UnlockConcurrent int
 	DebugMode        bool
+	EnableRisk       bool
 }
 
 type SpeedTester struct {
@@ -246,7 +246,7 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 
 	client := st.createClient(proxy)
 
-	// 2. 如果启用了解锁检测，进行地理位置和流媒体检测。
+	// 2. 如果启用了解锁检测，进行地理位置和流媒体检测
 	if st.config.EnableUnlock {
 		location, err := st.testLocation(client)
 		if err == nil {
@@ -326,37 +326,10 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 }
 
 func (st *SpeedTester) testLocation(client *http.Client) (string, error) {
-	req, err := http.NewRequest("GET", "https://api.ip.sb/geoip", nil)
-	if err != nil {
-		return "", err
+	if st.config.EnableUnlock && st.config.EnableRisk {
+		return unlock.GetLocationWithRisk(client, st.config.DebugMode)
 	}
-
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	var result struct {
-		Country string `json:"country"`
-		City    string `json:"city"`
-	}
-
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", err
-	}
-
-	if result.Country != "" {
-		return result.Country, nil
-	}
-	return result.City, nil
+	return unlock.GetLocation(client, st.config.DebugMode)
 }
 
 type latencyResult struct {
