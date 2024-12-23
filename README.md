@@ -8,7 +8,7 @@ Features:
 3. 不依赖额外的 Clash/Mihomo 进程实例，单一工具即可完成测试
 4. 代码简单而且开源，不发布构建好的二进制文件，保证你的节点安全
 5. 支持流媒体解锁检测功能，可以测试 40+ 个主流流媒体平台
-6. 支持显示节点的地理位置信息
+6. 支持显示节点的地理位置信息和 IP 纯净度
 7. 支持显示节点延迟、抖动和丢包率
 8. 支持调试模式查看详细的解锁测试信息
 9. 支持自定义并发数，提高测试效率
@@ -19,6 +19,8 @@ Features:
 <img width="1332" alt="image" src="https://github.com/OP404OP/clash-speedtest/blob/main/unlock.png?raw=true">
 
 <img width="1332" alt="image" src="https://github.com/OP404OP/clash-speedtest/blob/main/unlockdebug.png?raw=true">
+
+<img width="1332" alt="image" src="https://github.com/OP404OP/clash-speedtest/blob/af56ceadad44bc93f5525e2ac962ce8fff1cb00f/unlockrisk.png?raw=true">
 
 ## 使用方法
 
@@ -56,6 +58,8 @@ Usage of clash-speedtest:
         concurrent size for unlock testing (default 5)
   -debug
         enable debug mode for unlock testing
+  -risk
+        enable IP risk checking when unlock testing is enabled
 
 # 演示：
 
@@ -102,11 +106,20 @@ Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 > clash-speedtest -c config.yaml -unlock -unlock-concurrent 10
 # 默认并发数为 5，可以根据需要调整以平衡速度和稳定性
 
+# 8. 启用 IP 纯净度检测
+> clash-speedtest -c config.yaml -unlock -risk
+# 此命令将检测节点 IP 的纯净度，显示格式为：[分数 级别]
+# - [0 纯净]：绿色，表示 IP 非常干净
+# - [1-65 一般]：黄色，表示 IP 有轻微风险
+# - [66+ 较差]：橙色，表示 IP 风险较高
+# - [-- 非常差]：红色，表示 IP 风险非常高
+# - [值 未知]：白色，表示无法获取风险信息
+
 检测结果示例：
-节点                 延迟       抖动    	丢包率	  地理位置	 流媒体
-Premium|广港|IEPL|01 180.00ms  12.5ms    0.0%	   香港	   Netflix:SG, Disney+, HBO Max, Prime Video, Bilibili China Mainland Only
-Premium|广港|IEPL|02 165.00ms  8.2ms     0.0%	   香港	   Netflix:HK, Disney+, HBO Max, Prime Video, Bilibili HongKong/Macau/Taiwan
-Premium|广港|IEPL|03 195.00ms  15.8ms    1.2%	   香港	   Netflix:HK, Disney+, HBO Max, Prime Video, Bilibili Taiwan Only
+节点                 延迟       抖动    	丢包率	  地理位置	        流媒体
+Premium|广港|IEPL|01 180.00ms  12.5ms    0.0%	  香港 [0 纯净]	  Netflix:SG, Disney+, HBO Max, Prime Video
+Premium|广港|IEPL|02 165.00ms  8.2ms     0.0%	  香港 [50 一般]	  Netflix:HK, Disney+, HBO Max, Prime Video
+Premium|广港|IEPL|03 195.00ms  15.8ms    1.2%	  香港 [66 较差]	  Netflix:HK, Disney+, HBO Max, Prime Video
 
 演示项目：[https://github.com/faceair/freesub](https://github.com/faceair/freesub) 通过 Github Action 使用本工具对免费订阅进行测速，并保存结果。
 
@@ -117,6 +130,7 @@ Premium|广港|IEPL|03 195.00ms  15.8ms    1.2%	   香港	   Netflix:HK, Disney+
 测试结果：
 1. 带宽 是指下载指定大小文件的速度，即一般理解中的下载速度。当这个数值越高时表明节点的出口带宽越大。
 2. 延迟 是指 HTTP GET 请求拿到第一个字节的的响应时间，即一般理解中的 TTFB。当这个数值越低时表明你本地到达节点的延迟越低，可能意味着中转节点有 BGP 部署、出海线路是 IEPL、IPLC 等。
+3. IP 纯净度 是指节点 IP 的风险等级，分为纯净、一般、较差、非常差四个等级。数值越低表示 IP 越干净，被各种网站或服务屏蔽的可能性越小。
 
 请注意带宽跟延迟是两个独立的指标，两者并不关联：
 1. 可能带宽很高但是延迟也很高，这种情况下你下载速度很快但是打开网页的时候却很慢，可能是是中转节点没有 BGP 加速，但出海线路带宽很充足。
