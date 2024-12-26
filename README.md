@@ -13,6 +13,10 @@ Features:
 8. 支持调试模式查看详细的解锁测试信息
 9. 支持自定义并发数，提高测试效率
 10. 在开启 -unlock 模式下，将跳过上传速度和下载速度测试
+11. 支持快速测试模式（-fast），仅测试节点延迟
+12. 支持生成美观的 HTML 报告，包含实时刷新和配置转换功能
+13. 支持节点测试结果的颜色标记，直观显示节点质量
+14. 支持国旗图标显示，美化节点显示效果
 
 <img width="1332" alt="image" src="https://github.com/user-attachments/assets/fdc47ec5-b626-45a3-a38a-6d88c326c588">
 
@@ -21,6 +25,26 @@ Features:
 <img width="1332" alt="image" src="https://github.com/OP404OP/clash-speedtest/blob/main/unlockdebug.png?raw=true">
 
 <img width="1332" alt="image" src="https://github.com/OP404OP/clash-speedtest/blob/af56ceadad44bc93f5525e2ac962ce8fff1cb00f/unlockrisk.png?raw=true">
+
+## HTML报告
+- -fast: 快速测试模式，仅测试节点延迟
+
+<img width="1332" alt="image" src="https://github.com/OP404OP/clash-speedtest/blob/ab8b8b356cb18726c6b07ecd2a8d2620b5f32ed0/fast.png?raw=true">
+
+<img width="1332" alt="image" src="https://github.com/OP404OP/clash-speedtest/blob/ab8b8b356cb18726c6b07ecd2a8d2620b5f32ed0/html_fast.png?raw=true">
+
+- 测速全部节点
+
+<img width="1332" alt="image" src="https://github.com/OP404OP/clash-speedtest/blob/ab8b8b356cb18726c6b07ecd2a8d2620b5f32ed0/html_speed.png?raw=true">
+
+- -unlock -risk: 启用流媒体解锁检测和IP风险检测
+
+<img width="1332" alt="image" src="https://github.com/OP404OP/clash-speedtest/blob/ab8b8b356cb18726c6b07ecd2a8d2620b5f32ed0/2024-12-26-09.png?raw=true">
+
+
+- HTML报告配置转换（Clash/Mihomo -> Xray）
+
+<img width="1332" alt="image" src="https://github.com/OP404OP/clash-speedtest/blob/ab8b8b356cb18726c6b07ecd2a8d2620b5f32ed0/html_convert.png?raw=true">
 
 ## 使用方法
 
@@ -49,17 +73,22 @@ Usage of clash-speedtest:
   -output string
         output config file path (default "")
   -max-latency duration
-        filter latency greater than this value (default 800ms)
+        If not specified, the default filter latency is greater than 0) Latency filtering threshold, in ms, nodes greater than this value will be filtered, for example -max-latency 1000ms means filtering nodes with latency greater than 1000 ms
   -min-speed float
-        filter speed less than this value(unit: MB/s) (default 5)
+        If not specified, the default filter is nodes with latency greater than 0) Speed ​​filter threshold, in MB/s, nodes with a speed less than this value will be filtered, for example -min-speed 10 means filtering nodes with a speed less than 10 MB/s
   -unlock
-        enable streaming media unlock detection
+        enable streaming media unlock detection(Unlock detection with streaming media when OUTPUT is enabled, only nodes with delay greater than 0 are saved by default)
   -unlock-concurrent int
         concurrent size for unlock testing (default 5)
   -debug
         enable debug mode for unlock testing
   -risk
         enable IP risk checking when unlock testing is enabled
+  -html string
+        output HTML report path (default "")
+        By default, the configuration conversion service is started on the local port 8080.
+  -fast
+        enable fast mode, only test latency
 
 # 演示：
 
@@ -115,6 +144,22 @@ Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 # - [-- 非常差]：红色，表示 IP 风险非常高
 # - [值 未知]：白色，表示无法获取风险信息
 
+# 9. 生成 HTML 报告
+> clash-speedtest -c config.yaml -html report.html
+# 此命令将生成一个美观的 HTML 报告，支持以下功能：
+# - 实时自动刷新测试结果(5秒刷新一次)
+# - 支持手动刷新
+# - 配置转换功能
+# - 颜色标记显示节点质量
+# - 国旗图标显示
+
+# 10. 快速测试模式
+> clash-speedtest -c config.yaml -fast
+# 此命令将只测试节点延迟，跳过其他测试项目，适用于：
+# - 快速检查节点是否可用
+# - 只需要检查延迟的场景
+# - 需要快速得到测试结果的场景
+
 检测结果示例：
 节点                 延迟       抖动    	丢包率	  地理位置	        流媒体
 Premium|广港|IEPL|01 180.00ms  12.5ms    0.0%	  香港 [0 纯净]	  Netflix:SG, Disney+, HBO Max, Prime Video
@@ -123,6 +168,7 @@ Premium|广港|IEPL|03 195.00ms  15.8ms    1.2%	  香港 [66 较差]	  Netflix:H
 
 演示项目：[https://github.com/faceair/freesub](https://github.com/faceair/freesub) 通过 Github Action 使用本工具对免费订阅进行测速，并保存结果。
 
+```
 ## 测速原理
 
 通过 HTTP GET 请求下载指定大小的文件，默认使用 https://speed.cloudflare.com (50MB) 进行测试，计算下载时间得到下载速度。
