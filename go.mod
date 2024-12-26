@@ -1,19 +1,22 @@
 module github.com/faceair/clash-speedtest
 
-go 1.23
+go 1.22
 
 require (
+	github.com/andybalholm/brotli v1.1.0
 	github.com/metacubex/mihomo v1.18.10
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/schollz/progressbar/v3 v3.17.0
 	gopkg.in/yaml.v3 v3.0.1
+	reporter v0.0.0
 )
+
+replace reporter => ./reporter
 
 require (
 	github.com/3andne/restls-client-go v0.1.6 // indirect
 	github.com/RyuaNerin/go-krypto v1.2.4 // indirect
 	github.com/Yawning/aez v0.0.0-20211027044916-e49e68abd344 // indirect
-	github.com/andybalholm/brotli v1.0.6 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/cloudflare/circl v1.3.7 // indirect
 	github.com/coreos/go-iptables v0.8.0 // indirect
