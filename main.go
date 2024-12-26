@@ -1,12 +1,18 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
+	"os/signal"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
+
+	"reporter"
 
 	"github.com/faceair/clash-speedtest/speedtester"
 	"github.com/metacubex/mihomo/log"
@@ -16,20 +22,22 @@ import (
 )
 
 var (
-	configPathsConfig = flag.String("c", "", "config file path, also support http(s) url")
-	filterRegexConfig = flag.String("f", ".+", "filter proxies by name, use regexp")
-	serverURL         = flag.String("server-url", "https://speed.cloudflare.com", "server url")
-	downloadSize      = flag.Int("download-size", 50*1024*1024, "download size for testing proxies")
-	uploadSize        = flag.Int("upload-size", 20*1024*1024, "upload size for testing proxies")
-	timeout           = flag.Duration("timeout", time.Second*5, "timeout for testing proxies")
-	concurrent        = flag.Int("concurrent", 4, "download concurrent size")
-	outputPath        = flag.String("output", "", "output config file path")
-	maxLatency        = flag.Duration("max-latency", 800*time.Millisecond, "filter latency greater than this value")
-	minSpeed          = flag.Float64("min-speed", 5, "filter speed less than this value(unit: MB/s)")
-	enableUnlock      = flag.Bool("unlock", false, "enable streaming media unlock detection")
-	unlockConcurrent  = flag.Int("unlock-concurrent", 5, "concurrent size for unlock testing")
-	debugMode         = flag.Bool("debug", false, "enable debug mode for unlock testing")
-	enableRisk        = flag.Bool("risk", false, "enable IP risk checking when unlock testing is enabled")
+	configPathsConfig = flag.String("c", "", "配置文件路径，支持 http(s) 链接")
+	filterRegexConfig = flag.String("f", ".+", "使用正则表达式过滤节点名称")
+	serverURL         = flag.String("server-url", "https://speed.cloudflare.com", "测速服务器地址")
+	downloadSize      = flag.Int("download-size", 50*1024*1024, "下载测试的数据大小")
+	uploadSize        = flag.Int("upload-size", 20*1024*1024, "上传测试的数据大小")
+	timeout           = flag.Duration("timeout", time.Second*5, "测试超时时间")
+	concurrent        = flag.Int("concurrent", 4, "下载并发数")
+	outputPath        = flag.String("output", "", "输出配置文件路径")
+	maxLatency        = flag.Duration("max-latency", 0, "(如果没有指定，默认过滤延迟大于0的节点)延迟过滤阈值，单位 ms，大于此值的节点将被过滤，例如 -max-latency 1000ms 表示过滤延迟大于 1000 ms 的节点")
+	minSpeed          = flag.Float64("min-speed", 0, "(如果没有指定，默认过滤延迟大于0的节点)速度过滤阈值，单位 MB/s，小于此值的节点将被过滤，例如 -min-speed 10 表示过滤速度小于 10 MB/s 的节点")
+	enableUnlock      = flag.Bool("unlock", false, "启用流媒体解锁检测(启用OUTPUT时，默认只保存延迟大于0的节点)")
+	unlockConcurrent  = flag.Int("unlock-concurrent", 5, "解锁测试并发数，默认 5 (仅在-unlock模式下有效)")
+	debugMode         = flag.Bool("debug", false, "启用解锁测试的调试模式(仅在-unlock模式下有效)")
+	enableRisk        = flag.Bool("risk", false, "启用解锁测试时的 IP 风险检测(仅在-unlock模式下有效)")
+	htmlReport        = flag.String("html", "", "输出 HTML 报告的路径(默认5秒自动刷新，支持手动刷新)")
+	fastMode          = flag.Bool("fast", false, "快速测试模式，仅测试节点延迟")
 )
 
 const (
@@ -37,7 +45,7 @@ const (
 	colorGreen  = "\033[32m"
 	colorYellow = "\033[33m"
 	colorReset  = "\033[0m"
-	Version     = "1.6.1"
+	Version     = "1.6.2"
 )
 
 func main() {
@@ -66,7 +74,14 @@ func main() {
 		UnlockConcurrent: *unlockConcurrent,
 		DebugMode:        *debugMode,
 		EnableRisk:       *enableRisk,
-	})
+		HTMLReport:       *htmlReport,
+		OutputPath:       *outputPath,
+		FastMode:         *fastMode,
+	}, *debugMode)
+
+	if *debugMode {
+		fmt.Println("Debug 模式已启用")
+	}
 
 	allProxies, err := speedTester.LoadProxies()
 	if err != nil {
@@ -76,9 +91,9 @@ func main() {
 	bar := progressbar.Default(int64(len(allProxies)), "测试中...")
 	results := make([]*speedtester.Result, 0)
 	speedTester.TestProxies(allProxies, func(result *speedtester.Result) {
+		results = append(results, result)
 		bar.Add(1)
 		bar.Describe(result.ProxyName)
-		results = append(results, result)
 	})
 
 	sort.Slice(results, func(i, j int) bool {
@@ -94,13 +109,88 @@ func main() {
 		}
 		fmt.Printf("\nsave config file to: %s\n", *outputPath)
 	}
+
+	if *htmlReport != "" {
+		quit := make(chan struct{})
+		mux := http.NewServeMux()
+		mux.HandleFunc("/convert", reporter.HandleConverter)
+		mux.HandleFunc("/readfile", reporter.HandleReadFile)
+
+		server := &http.Server{
+			Addr:    "127.0.0.1:8080",
+			Handler: mux,
+		}
+
+		go func() {
+			if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Errorln("HTTP server error: %v", err)
+			}
+		}()
+
+		fmt.Printf("\n配置转换服务已启动 [127.0.0.1 端口: 8080]\n")
+		fmt.Printf("按 Enter 键或 Ctrl+C 退出程序...\n")
+
+		go func() {
+			fmt.Scanln()
+			close(quit)
+		}()
+
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+		select {
+		case <-quit:
+			fmt.Println("\n收到退出信号，正在关闭服务器...")
+		case <-sigChan:
+			fmt.Println("\n收到中断信号，正在关闭服务器...")
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := server.Shutdown(ctx); err != nil {
+			log.Errorln("服务器关闭出错: %v", err)
+		} else {
+			fmt.Println("服务器已关闭，端口已释放")
+		}
+	}
 }
 
 func printResults(results []*speedtester.Result, enableUnlock bool) {
 	table := tablewriter.NewWriter(os.Stdout)
 
+	// 处理流媒体结果的换行
+	formatStreamUnlock := func(unlock string) string {
+		if unlock == "N/A" {
+			return unlock
+		}
+		// 每4个台换一行
+		parts := strings.Split(unlock, ", ")
+		var lines []string
+		for i := 0; i < len(parts); i += 4 {
+			end := i + 4
+			if end > len(parts) {
+				end = len(parts)
+			}
+			lineItems := parts[i:end]
+			// 为每个平台添加色
+			for j := range lineItems {
+				lineItems[j] = colorGreen + lineItems[j] + colorReset
+			}
+			lines = append(lines, strings.Join(lineItems, ", "))
+		}
+		return strings.Join(lines, "\n")
+	}
+
 	var headers []string
-	if enableUnlock {
+	if *fastMode {
+		headers = []string{
+			"序号",
+			"节点名称",
+			"类型",
+			"延迟",
+		}
+	} else if enableUnlock {
 		headers = []string{
 			"序号",
 			"节点名称",
@@ -126,7 +216,7 @@ func printResults(results []*speedtester.Result, enableUnlock bool) {
 	table.SetHeader(headers)
 
 	// 设置表格样式
-	table.SetAutoWrapText(false) // 默认关闭自动换行
+	table.SetAutoWrapText(false)
 	table.SetAutoFormatHeaders(true)
 	table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
 	table.SetAlignment(tablewriter.ALIGN_LEFT)
@@ -139,7 +229,12 @@ func printResults(results []*speedtester.Result, enableUnlock bool) {
 	table.SetNoWhiteSpace(true)
 
 	// 设置列宽度
-	if enableUnlock {
+	if *fastMode {
+		table.SetColMinWidth(0, 4)  // 序号
+		table.SetColMinWidth(1, 20) // 节点名称
+		table.SetColMinWidth(2, 8)  // 类型
+		table.SetColMinWidth(3, 8)  // 延迟
+	} else if enableUnlock {
 		table.SetColMinWidth(0, 4)  // 序号
 		table.SetColMinWidth(1, 20) // 节点名称
 		table.SetColMinWidth(2, 8)  // 类型
@@ -159,29 +254,6 @@ func printResults(results []*speedtester.Result, enableUnlock bool) {
 		table.SetColMinWidth(7, 12) // 上传速度
 	}
 
-	// 处理流媒体结果的换行
-	formatStreamUnlock := func(unlock string) string {
-		if unlock == "N/A" {
-			return unlock
-		}
-		// 每4个台换一行
-		parts := strings.Split(unlock, ", ")
-		var lines []string
-		for i := 0; i < len(parts); i += 4 {
-			end := i + 4
-			if end > len(parts) {
-				end = len(parts)
-			}
-			lineItems := parts[i:end]
-			// 为每个平台添加颜色
-			for j := range lineItems {
-				lineItems[j] = colorGreen + lineItems[j] + colorReset
-			}
-			lines = append(lines, strings.Join(lineItems, ", "))
-		}
-		return strings.Join(lines, "\n")
-	}
-
 	for i, result := range results {
 		idStr := fmt.Sprintf("%d.", i+1)
 
@@ -199,46 +271,6 @@ func printResults(results []*speedtester.Result, enableUnlock bool) {
 			latencyStr = colorRed + latencyStr + colorReset
 		}
 
-		// 如果是解锁测试模式且延迟为0或丢包率为100%，则跳过后续测试
-		if enableUnlock && (result.Latency == 0 || result.PacketLoss == 100) {
-			row := []string{
-				idStr,
-				colorRed + result.ProxyName + colorReset,
-				colorRed + result.ProxyType + colorReset,
-				latencyStr,
-				colorRed + "N/A" + colorReset,
-				colorRed + "N/A" + colorReset,
-				colorRed + "N/A" + colorReset,
-				colorRed + "N/A" + colorReset,
-			}
-			table.Append(row)
-			continue
-		}
-
-		// 抖动颜色
-		jitterStr := result.FormatJitter()
-		if result.Jitter > 0 {
-			if result.Jitter < 800*time.Millisecond {
-				jitterStr = colorGreen + jitterStr + colorReset
-			} else if result.Jitter < 1500*time.Millisecond {
-				jitterStr = colorYellow + jitterStr + colorReset
-			} else {
-				jitterStr = colorRed + jitterStr + colorReset
-			}
-		} else {
-			jitterStr = colorRed + jitterStr + colorReset
-		}
-
-		// 丢包率颜色
-		packetLossStr := result.FormatPacketLoss()
-		if result.PacketLoss < 10 {
-			packetLossStr = colorGreen + packetLossStr + colorReset
-		} else if result.PacketLoss < 20 {
-			packetLossStr = colorYellow + packetLossStr + colorReset
-		} else {
-			packetLossStr = colorRed + packetLossStr + colorReset
-		}
-
 		// 节点名称和类型颜色
 		proxyNameStr := result.ProxyName
 		proxyTypeStr := result.ProxyType
@@ -251,69 +283,149 @@ func printResults(results []*speedtester.Result, enableUnlock bool) {
 		}
 
 		var row []string
-		if enableUnlock {
-			// 地理位置颜色
-			locationStr := result.FormatLocation()
-			if locationStr != "N/A" {
-				locationStr = colorGreen + locationStr + colorReset
-			} else {
-				locationStr = colorRed + locationStr + colorReset
-			}
-
-			// 流媒体解锁颜色
-			streamUnlock := result.FormatStreamUnlock()
-			if *debugMode {
-				fmt.Printf("节点 %s 的流媒体结果: %s\n", result.ProxyName, streamUnlock)
-			}
-			var unlockStr string
-			if streamUnlock != "N/A" {
-				unlockStr = formatStreamUnlock(streamUnlock)
-			} else {
-				unlockStr = colorRed + "N/A" + colorReset
-			}
-
+		if *fastMode {
 			row = []string{
 				idStr,
 				proxyNameStr,
 				proxyTypeStr,
 				latencyStr,
-				jitterStr,
-				packetLossStr,
-				locationStr,
-				unlockStr,
+			}
+		} else if enableUnlock {
+			// 如果是解锁测试模式且延迟为0或丢包率为100%，则跳过后续测试
+			if result.Latency == 0 || result.PacketLoss == 100 {
+				row = []string{
+					idStr,
+					proxyNameStr,
+					proxyTypeStr,
+					latencyStr,
+					colorRed + "N/A" + colorReset,
+					colorRed + "N/A" + colorReset,
+					colorRed + "N/A" + colorReset,
+					colorRed + "N/A" + colorReset,
+				}
+			} else {
+				// 抖动颜色
+				jitterStr := result.FormatJitter()
+				if result.Jitter > 0 {
+					if result.Jitter < 800*time.Millisecond {
+						jitterStr = colorGreen + jitterStr + colorReset
+					} else if result.Jitter < 1500*time.Millisecond {
+						jitterStr = colorYellow + jitterStr + colorReset
+					} else {
+						jitterStr = colorRed + jitterStr + colorReset
+					}
+				} else {
+					jitterStr = colorRed + jitterStr + colorReset
+				}
+
+				// 丢包率颜色
+				packetLossStr := result.FormatPacketLoss()
+				if result.PacketLoss < 10 {
+					packetLossStr = colorGreen + packetLossStr + colorReset
+				} else if result.PacketLoss < 20 {
+					packetLossStr = colorYellow + packetLossStr + colorReset
+				} else {
+					packetLossStr = colorRed + packetLossStr + colorReset
+				}
+
+				// 地理位置颜色
+				locationStr := result.FormatLocation()
+				if locationStr != "N/A" {
+					locationStr = colorGreen + locationStr + colorReset
+				} else {
+					locationStr = colorRed + locationStr + colorReset
+				}
+
+				// 流媒体解锁颜色
+				streamUnlock := result.FormatStreamUnlock()
+				var unlockStr string
+				if streamUnlock != "N/A" {
+					unlockStr = formatStreamUnlock(streamUnlock)
+				} else {
+					unlockStr = colorRed + "N/A" + colorReset
+				}
+
+				row = []string{
+					idStr,
+					proxyNameStr,
+					proxyTypeStr,
+					latencyStr,
+					jitterStr,
+					packetLossStr,
+					locationStr,
+					unlockStr,
+				}
 			}
 		} else {
-			// 下载速度颜色
-			downloadSpeed := result.DownloadSpeed / (1024 * 1024)
-			downloadSpeedStr := result.FormatDownloadSpeed()
-			if downloadSpeed >= 10 {
-				downloadSpeedStr = colorGreen + downloadSpeedStr + colorReset
-			} else if downloadSpeed >= 5 {
-				downloadSpeedStr = colorYellow + downloadSpeedStr + colorReset
+			// 如果延迟为0或丢包率为100%，则跳过后续测试
+			if result.Latency == 0 || result.PacketLoss == 100 {
+				row = []string{
+					idStr,
+					proxyNameStr,
+					proxyTypeStr,
+					latencyStr,
+					colorRed + "N/A" + colorReset,
+					colorRed + "N/A" + colorReset,
+					colorRed + "N/A" + colorReset,
+					colorRed + "N/A" + colorReset,
+				}
 			} else {
-				downloadSpeedStr = colorRed + downloadSpeedStr + colorReset
-			}
+				// 抖动颜色
+				jitterStr := result.FormatJitter()
+				if result.Jitter > 0 {
+					if result.Jitter < 800*time.Millisecond {
+						jitterStr = colorGreen + jitterStr + colorReset
+					} else if result.Jitter < 1500*time.Millisecond {
+						jitterStr = colorYellow + jitterStr + colorReset
+					} else {
+						jitterStr = colorRed + jitterStr + colorReset
+					}
+				} else {
+					jitterStr = colorRed + jitterStr + colorReset
+				}
 
-			// 上传速度颜色
-			uploadSpeed := result.UploadSpeed / (1024 * 1024)
-			uploadSpeedStr := result.FormatUploadSpeed()
-			if uploadSpeed >= 5 {
-				uploadSpeedStr = colorGreen + uploadSpeedStr + colorReset
-			} else if uploadSpeed >= 2 {
-				uploadSpeedStr = colorYellow + uploadSpeedStr + colorReset
-			} else {
-				uploadSpeedStr = colorRed + uploadSpeedStr + colorReset
-			}
+				// 丢包率颜色
+				packetLossStr := result.FormatPacketLoss()
+				if result.PacketLoss < 10 {
+					packetLossStr = colorGreen + packetLossStr + colorReset
+				} else if result.PacketLoss < 20 {
+					packetLossStr = colorYellow + packetLossStr + colorReset
+				} else {
+					packetLossStr = colorRed + packetLossStr + colorReset
+				}
 
-			row = []string{
-				idStr,
-				proxyNameStr,
-				proxyTypeStr,
-				latencyStr,
-				jitterStr,
-				packetLossStr,
-				downloadSpeedStr,
-				uploadSpeedStr,
+				// 下载速度颜色
+				downloadSpeed := result.DownloadSpeed / (1024 * 1024)
+				downloadSpeedStr := result.FormatDownloadSpeed()
+				if downloadSpeed >= 10 {
+					downloadSpeedStr = colorGreen + downloadSpeedStr + colorReset
+				} else if downloadSpeed >= 5 {
+					downloadSpeedStr = colorYellow + downloadSpeedStr + colorReset
+				} else {
+					downloadSpeedStr = colorRed + downloadSpeedStr + colorReset
+				}
+
+				// 上传速度颜色
+				uploadSpeed := result.UploadSpeed / (1024 * 1024)
+				uploadSpeedStr := result.FormatUploadSpeed()
+				if uploadSpeed >= 5 {
+					uploadSpeedStr = colorGreen + uploadSpeedStr + colorReset
+				} else if uploadSpeed >= 2 {
+					uploadSpeedStr = colorYellow + uploadSpeedStr + colorReset
+				} else {
+					uploadSpeedStr = colorRed + uploadSpeedStr + colorReset
+				}
+
+				row = []string{
+					idStr,
+					proxyNameStr,
+					proxyTypeStr,
+					latencyStr,
+					jitterStr,
+					packetLossStr,
+					downloadSpeedStr,
+					uploadSpeedStr,
+				}
 			}
 		}
 
@@ -328,12 +440,27 @@ func printResults(results []*speedtester.Result, enableUnlock bool) {
 func saveConfig(results []*speedtester.Result) error {
 	filteredResults := make([]*speedtester.Result, 0)
 	for _, result := range results {
-		if *maxLatency > 0 && result.Latency > *maxLatency {
+		// 检查延迟是否大于0
+		if result.Latency <= 0 {
 			continue
 		}
+
+		if *enableUnlock {
+			// 解锁模式：只要延迟大于0就保存
+			filteredResults = append(filteredResults, result)
+			continue
+		}
+
+		// 检查延迟条件
+		if *maxLatency > 0 && result.Latency >= *maxLatency {
+			continue
+		}
+
+		// 检查速度条件
 		if *minSpeed > 0 && float64(result.DownloadSpeed)/(1024*1024) < *minSpeed {
 			continue
 		}
+
 		filteredResults = append(filteredResults, result)
 	}
 
