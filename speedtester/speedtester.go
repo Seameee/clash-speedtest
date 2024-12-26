@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"reporter"
+
 	"github.com/faceair/clash-speedtest/unlock"
 	"github.com/metacubex/mihomo/adapter"
 	"github.com/metacubex/mihomo/adapter/provider"
@@ -34,13 +36,17 @@ type Config struct {
 	UnlockConcurrent int
 	DebugMode        bool
 	EnableRisk       bool
+	HTMLReport       string
+	OutputPath       string
+	FastMode         bool
 }
 
 type SpeedTester struct {
-	config *Config
+	config    *Config
+	debugMode bool
 }
 
-func New(config *Config) *SpeedTester {
+func New(config *Config, debugMode bool) *SpeedTester {
 	if config.Concurrent <= 0 {
 		config.Concurrent = 1
 	}
@@ -51,7 +57,8 @@ func New(config *Config) *SpeedTester {
 		config.UploadSize = 10 * 1024 * 1024
 	}
 	return &SpeedTester{
-		config: config,
+		config:    config,
+		debugMode: debugMode,
 	}
 }
 
@@ -120,7 +127,10 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 				return nil, fmt.Errorf("initial proxy provider %s error: %w", pd.Name(), err)
 			}
 			for _, proxy := range pd.Proxies() {
-				proxies[fmt.Sprintf("[%s] %s", name, proxy.Name())] = &CProxy{Proxy: proxy}
+				proxies[fmt.Sprintf("[%s] %s", name, proxy.Name())] = &CProxy{
+					Proxy:  proxy,
+					Config: config,
+				}
 			}
 		}
 		for k, p := range proxies {
@@ -148,8 +158,59 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 }
 
 func (st *SpeedTester) TestProxies(proxies map[string]*CProxy, fn func(result *Result)) {
+	var htmlReporter *reporter.HTMLReporter
+	var err error
+
+	if st.config.HTMLReport != "" {
+		htmlReporter, err = reporter.NewHTMLReporter(
+			st.config.HTMLReport,
+			st.config.EnableUnlock,
+			st.config.ConfigPaths,
+			len(proxies),
+			st.config.OutputPath,
+			st.config.FastMode,
+		)
+		if err != nil {
+			log.Errorln("初始化 HTML 报告失败: %v", err)
+			return
+		}
+	}
+
 	for name, proxy := range proxies {
-		fn(st.testProxy(name, proxy))
+		result := st.testProxy(name, proxy)
+
+		if htmlReporter != nil {
+			// 转换结果为 HTML 报告格式
+			htmlResult := &reporter.Result{
+				ProxyName:    result.ProxyName,
+				ProxyType:    result.ProxyType,
+				Latency:      result.FormatLatency(),
+				LatencyValue: result.Latency.Milliseconds(),
+				LastUpdate:   time.Now(),
+			}
+
+			// 只在非快速模式下添加其他信息
+			if !st.config.FastMode {
+				htmlResult.Jitter = result.FormatJitter()
+				htmlResult.JitterValue = result.Jitter.Milliseconds()
+				htmlResult.PacketLoss = result.FormatPacketLoss()
+				htmlResult.PacketLossValue = result.PacketLoss
+				htmlResult.Location = reporter.FormatLocation(result.FormatLocation())
+				htmlResult.StreamUnlock = result.FormatStreamUnlock()
+				htmlResult.UnlockPlatforms = reporter.ParseStreamUnlock(result.FormatStreamUnlock())
+				htmlResult.DownloadSpeed = result.FormatDownloadSpeed()
+				htmlResult.DownloadSpeedMB = result.DownloadSpeed / (1024 * 1024)
+				htmlResult.UploadSpeed = result.FormatUploadSpeed()
+				htmlResult.UploadSpeedMB = result.UploadSpeed / (1024 * 1024)
+			}
+
+			if err := htmlReporter.AddResult(htmlResult); err != nil {
+				log.Errorln("添加 HTML 报告结果失败: %v", err)
+			}
+		}
+
+		// 回调函数在最后调用，确保 HTML 报告已更新
+		fn(result)
 	}
 }
 
@@ -233,11 +294,20 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 		ProxyConfig: proxy.Config,
 	}
 
-	// 1. 首先进行延迟测试
+	// 1. 先进行延迟测试
 	latencyResult := st.testLatency(proxy)
 	result.Latency = latencyResult.avgLatency
-	result.Jitter = latencyResult.jitter
-	result.PacketLoss = latencyResult.packetLoss
+
+	// 如果是快速模式，只测试延迟，不测试抖动和丢包率
+	if !st.config.FastMode {
+		result.Jitter = latencyResult.jitter
+		result.PacketLoss = latencyResult.packetLoss
+	}
+
+	// 如果是快速模式，只测试延迟，直接返回结果
+	if st.config.FastMode {
+		return result
+	}
 
 	// 如果延迟测试失败（延迟为0或丢包率为100%），直接返回结果
 	if result.Latency == 0 || result.PacketLoss == 100 {
@@ -254,72 +324,74 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 		}
 
 		// 进行流媒体解锁测试
-		result.StreamUnlock = unlock.TestAll(client, st.config.UnlockConcurrent, st.config.DebugMode)
-		return result
+		result.StreamUnlock = unlock.TestAll(client, st.config.UnlockConcurrent, st.debugMode)
 	}
 
-	// 3. 并发进行下载和上传测试
-	var wg sync.WaitGroup
-	downloadResults := make(chan *downloadResult, st.config.Concurrent)
+	// 3. 如果不是解锁模式，或者需要测试速度，进行下载和上传测试
+	if !st.config.EnableUnlock {
+		// 并发进行下载和上传测试
+		var wg sync.WaitGroup
+		downloadResults := make(chan *downloadResult, st.config.Concurrent)
 
-	// 计算每个并发连接的数据大小
-	downloadChunkSize := st.config.DownloadSize / st.config.Concurrent
-	uploadChunkSize := st.config.UploadSize / st.config.Concurrent
+		// 计算每个并发连接的数据大小
+		downloadChunkSize := st.config.DownloadSize / st.config.Concurrent
+		uploadChunkSize := st.config.UploadSize / st.config.Concurrent
 
-	// 启动下载测试
-	for i := 0; i < st.config.Concurrent; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			downloadResults <- st.testDownload(proxy, downloadChunkSize)
-		}()
-	}
-	wg.Wait()
-
-	uploadResults := make(chan *downloadResult, st.config.Concurrent)
-
-	// 启动上传测试
-	for i := 0; i < st.config.Concurrent; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			uploadResults <- st.testUpload(proxy, uploadChunkSize)
-		}()
-	}
-	wg.Wait()
-
-	// 4. 汇总结果
-	var totalDownloadBytes, totalUploadBytes int64
-	var totalDownloadTime, totalUploadTime time.Duration
-	var downloadCount, uploadCount int
-
-	for i := 0; i < st.config.Concurrent; i++ {
-		if dr := <-downloadResults; dr != nil {
-			totalDownloadBytes += dr.bytes
-			totalDownloadTime += dr.duration
-			downloadCount++
+		// 启动下载测试
+		for i := 0; i < st.config.Concurrent; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				downloadResults <- st.testDownload(proxy, downloadChunkSize)
+			}()
 		}
-	}
-	close(downloadResults)
+		wg.Wait()
 
-	for i := 0; i < st.config.Concurrent; i++ {
-		if ur := <-uploadResults; ur != nil {
-			totalUploadBytes += ur.bytes
-			totalUploadTime += ur.duration
-			uploadCount++
+		uploadResults := make(chan *downloadResult, st.config.Concurrent)
+
+		// 启动上传测试
+		for i := 0; i < st.config.Concurrent; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				uploadResults <- st.testUpload(proxy, uploadChunkSize)
+			}()
 		}
-	}
-	close(uploadResults)
+		wg.Wait()
 
-	if downloadCount > 0 {
-		result.DownloadSize = float64(totalDownloadBytes)
-		result.DownloadTime = totalDownloadTime / time.Duration(downloadCount)
-		result.DownloadSpeed = float64(totalDownloadBytes) / result.DownloadTime.Seconds()
-	}
-	if uploadCount > 0 {
-		result.UploadSize = float64(totalUploadBytes)
-		result.UploadTime = totalUploadTime / time.Duration(uploadCount)
-		result.UploadSpeed = float64(totalUploadBytes) / result.UploadTime.Seconds()
+		// 4. 汇总结果
+		var totalDownloadBytes, totalUploadBytes int64
+		var totalDownloadTime, totalUploadTime time.Duration
+		var downloadCount, uploadCount int
+
+		for i := 0; i < st.config.Concurrent; i++ {
+			if dr := <-downloadResults; dr != nil {
+				totalDownloadBytes += dr.bytes
+				totalDownloadTime += dr.duration
+				downloadCount++
+			}
+		}
+		close(downloadResults)
+
+		for i := 0; i < st.config.Concurrent; i++ {
+			if ur := <-uploadResults; ur != nil {
+				totalUploadBytes += ur.bytes
+				totalUploadTime += ur.duration
+				uploadCount++
+			}
+		}
+		close(uploadResults)
+
+		if downloadCount > 0 {
+			result.DownloadSize = float64(totalDownloadBytes)
+			result.DownloadTime = totalDownloadTime / time.Duration(downloadCount)
+			result.DownloadSpeed = float64(totalDownloadBytes) / result.DownloadTime.Seconds()
+		}
+		if uploadCount > 0 {
+			result.UploadSize = float64(totalUploadBytes)
+			result.UploadTime = totalUploadTime / time.Duration(uploadCount)
+			result.UploadSpeed = float64(totalUploadBytes) / result.UploadTime.Seconds()
+		}
 	}
 
 	return result
@@ -327,9 +399,9 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 
 func (st *SpeedTester) testLocation(client *http.Client) (string, error) {
 	if st.config.EnableUnlock && st.config.EnableRisk {
-		return unlock.GetLocationWithRisk(client, st.config.DebugMode)
+		return unlock.GetLocationWithRisk(client, st.debugMode)
 	}
-	return unlock.GetLocation(client, st.config.DebugMode)
+	return unlock.GetLocation(client, st.debugMode)
 }
 
 type latencyResult struct {
@@ -467,5 +539,5 @@ func calculateLatencyStats(latencies []time.Duration, failedPings int) *latencyR
 
 func (st *SpeedTester) testStreamUnlock(proxy *CProxy) (string, error) {
 	client := st.createClient(proxy)
-	return unlock.TestAll(client, st.config.UnlockConcurrent, st.config.DebugMode), nil
+	return unlock.TestAll(client, st.config.UnlockConcurrent, st.debugMode), nil
 }
