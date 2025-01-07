@@ -14,15 +14,15 @@ Features:
 9. 支持自定义并发数，提高测试效率
 10. 在开启 -unlock 模式下，将跳过上传速度和下载速度测试
 11. 支持快速测试模式（-fast），仅测试节点延迟
-12. 支持生成美观的 HTML 报告
+12. 支持节点测试结果的颜色标记，直观显示节点状态
+13. 支持国旗图标显示，美化节点显示效果
+14. 支持关键词屏蔽功能，可以屏蔽不需要的节点（如倍率节点等）
+15. 支持 IP 检测的 Cloudflare 验证伪装，提高检测准确性
+16. 支持生成美观的 HTML 报告
     - 支持实时刷新和配置转换功能
     - 支持表格排序和过滤
     - 支持一键导出测试结果截图
     - 支持配置转换（Clash/Mihomo -> sing-box/Xray）
-13.支持节点测试结果的颜色标记，直观显示节点状态
-14.支持国旗图标显示，美化节点显示效果
-15.支持关键词屏蔽功能，可以屏蔽不需要的节点（如倍率节点等）
-16.支持 IP 检测的 Cloudflare 验证伪装，提高检测准确性
 
 <img width="1332" alt="image" src="https://github.com/user-attachments/assets/fdc47ec5-b626-45a3-a38a-6d88c326c588">
 
@@ -52,7 +52,10 @@ Features:
 <img width="1332" alt="image" src="https://github.com/OP404OP/clash-speedtest/blob/ab8b8b356cb18726c6b07ecd2a8d2620b5f32ed0/html_convert.png?raw=true">
 
 - -b '倍率|x' -debug：屏蔽指定关键词节点并开启DEBUG模式
+<img width="1332" alt="image" src="https://github.com/OP404OP/clash-speedtest/blob/44e4ffdd5e3fd9001ff08f2fb1e34e4332cc9aca/%E5%B1%8F%E8%94%BD.png">
 
+- HTML报告内可生成测试结果长截图
+<img width="480" alt="image" src="https://github.com/OP404OP/clash-speedtest/blob/44e4ffdd5e3fd9001ff08f2fb1e34e4332cc9aca/speedtest-result-2025-01-07-19-10-19.png">
 
 ## 使用方法
 
