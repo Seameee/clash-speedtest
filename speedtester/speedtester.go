@@ -27,6 +27,7 @@ import (
 type Config struct {
 	ConfigPaths      string
 	FilterRegex      string
+	BlockRegex       string
 	ServerURL        string
 	DownloadSize     int
 	UploadSize       int
@@ -42,8 +43,10 @@ type Config struct {
 }
 
 type SpeedTester struct {
-	config    *Config
-	debugMode bool
+	config           *Config
+	debugMode        bool
+	blockedNodes     []string
+	blockedNodeCount int
 }
 
 func New(config *Config, debugMode bool) *SpeedTester {
@@ -74,6 +77,8 @@ type RawConfig struct {
 
 func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 	allProxies := make(map[string]*CProxy)
+	st.blockedNodes = make([]string, 0)
+	st.blockedNodeCount = 0
 
 	for _, configPath := range strings.Split(st.config.ConfigPaths, ",") {
 		var body []byte
@@ -148,12 +153,64 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 	}
 
 	filterRegexp := regexp.MustCompile(st.config.FilterRegex)
-	filteredProxies := make(map[string]*CProxy)
-	for name := range allProxies {
-		if filterRegexp.MatchString(name) {
-			filteredProxies[name] = allProxies[name]
+
+	// 处理屏蔽关键词
+	var blockKeywords []string
+	if st.config.BlockRegex != "" {
+		// 分割关键词，去除空格
+		for _, keyword := range strings.Split(st.config.BlockRegex, "|") {
+			keyword = strings.TrimSpace(keyword)
+			if keyword != "" {
+				blockKeywords = append(blockKeywords, strings.ToLower(keyword))
+			}
 		}
 	}
+
+	// 记录总节点数
+	totalNodes := len(allProxies)
+
+	filteredProxies := make(map[string]*CProxy)
+	for name, proxy := range allProxies {
+		// 检查是否包含屏蔽关键词
+		shouldBlock := false
+		if len(blockKeywords) > 0 {
+			lowerName := strings.ToLower(name)
+			for _, keyword := range blockKeywords {
+				if strings.Contains(lowerName, keyword) {
+					if st.debugMode {
+						st.blockedNodes = append(st.blockedNodes, fmt.Sprintf("%s (匹配关键词: %s)", name, keyword))
+						st.blockedNodeCount++
+					}
+					shouldBlock = true
+					break
+				}
+			}
+		}
+
+		if shouldBlock {
+			continue
+		}
+
+		if filterRegexp.MatchString(name) {
+			filteredProxies[name] = proxy
+		}
+	}
+
+	// 在Debug模式下输出屏蔽信息
+	if st.debugMode && len(blockKeywords) > 0 {
+		fmt.Printf("\n[Debug] 节点统计信息:\n")
+		fmt.Printf("[Debug] 总节点数: %d\n", totalNodes)
+		fmt.Printf("[Debug] 已屏蔽节点数: %d\n", st.blockedNodeCount)
+		fmt.Printf("[Debug] 剩余节点数: %d\n", len(filteredProxies))
+		if st.blockedNodeCount > 0 {
+			fmt.Printf("\n[Debug] 被屏蔽的节点:\n")
+			for _, name := range st.blockedNodes {
+				fmt.Printf("[Debug] - %s\n", name)
+			}
+		}
+		fmt.Println()
+	}
+
 	return filteredProxies, nil
 }
 
@@ -318,13 +375,26 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 
 	// 2. 如果启用了解锁检测，进行地理位置和流媒体检测
 	if st.config.EnableUnlock {
+		// 先获取地理位置和风险值
 		location, err := st.testLocation(client)
 		if err == nil {
 			result.Location = location
 		}
 
-		// 进行流媒体解锁测试
-		result.StreamUnlock = unlock.TestAll(client, st.config.UnlockConcurrent, st.debugMode)
+		// 创建一个通道用于流媒体检测结果
+		streamChan := make(chan string, 1)
+
+		// 在后台进行流媒体检测
+		go func() {
+			streamChan <- unlock.TestAll(client, st.config.UnlockConcurrent, st.debugMode)
+		}()
+
+		// 如果不需要测速，立即返回结果
+		if st.config.EnableUnlock {
+			// 等待流媒体检测结果
+			result.StreamUnlock = <-streamChan
+			return result
+		}
 	}
 
 	// 3. 如果不是解锁模式，或者需要测试速度，进行下载和上传测试
@@ -399,7 +469,7 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 
 func (st *SpeedTester) testLocation(client *http.Client) (string, error) {
 	if st.config.EnableUnlock && st.config.EnableRisk {
-		return unlock.GetLocationWithRisk(client, st.debugMode)
+		return unlock.GetLocationWithRisk(client, st.debugMode, st.config.EnableRisk)
 	}
 	return unlock.GetLocation(client, st.debugMode)
 }
