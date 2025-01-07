@@ -12,212 +12,403 @@ const converterTemplate = `
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>配置转换</title>
+    <title>Clash 配置转换工具</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/animate.css@4.1.1/animate.min.css" rel="stylesheet">
     <style>
         :root {
             --bs-body-bg: #f8f9fa;
             --bs-body-color: #212529;
+            --primary-color: #4F46E5;
+            --secondary-color: #6B7280;
+            --success-color: #059669;
+            --danger-color: #DC2626;
+            --warning-color: #D97706;
+            --info-color: #3B82F6;
         }
+        
         @media (prefers-color-scheme: dark) {
             :root {
-                --bs-body-bg: #212529;
-                --bs-body-color: #f8f9fa;
+                --bs-body-bg: #1F2937;
+                --bs-body-color: #F9FAFB;
+                --primary-color: #6366F1;
             }
             .container {
-                background: #2c3034 !important;
+                background: #374151 !important;
             }
             .form-control, .form-select {
-                background-color: #1a1d20;
+                background-color: #1F2937;
                 border-color: #495057;
                 color: #f8f9fa;
             }
+            .alert {
+                background-color: rgba(55, 65, 81, 0.9);
+                border-color: rgba(75, 85, 99, 0.3);
         }
+        }
+
         body {
             padding: 20px;
             background-color: var(--bs-body-bg);
             color: var(--bs-body-color);
+            min-height: 100vh;
         }
+
         .container {
-            max-width: 800px;
+            max-width: 1000px;
             background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
         }
+
         .converter-header {
             text-align: center;
-            margin-bottom: 2rem;
+            margin-bottom: 2.5rem;
+            animation: fadeIn 1s ease-in-out;
         }
+
         .converter-header h3 {
-            margin-bottom: 1rem;
+            margin-bottom: 1.3rem;
+            font-weight: 600;
+            color: var(--primary-color);
         }
+
         .converter-header p {
-            color: #6c757d;
+            color: var(--secondary-color);
             margin-bottom: 0;
+            font-size: 1.1rem;
+
         }
-        .rule-section {
-            margin: 15px 0;
-            padding: 15px;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-        }
-        .btn-convert {
-            min-width: 150px;
-            transition: all 0.3s;
-        }
-        .btn-convert:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
+
         .converter-content {
             background: var(--bs-body-bg);
-            border-radius: 8px;
-            padding: 20px;
+            border-radius: 12px;
+            padding: 25px;
             margin-top: 2rem;
+            animation: fadeInUp 0.5s ease-out;
+        }
+
+        .config-box {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 2rem;
+            border: 1px solid rgba(229, 231, 235, 0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .alert {
+            margin-bottom: 1.5rem;
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .alert i {
+            font-size: 1.25rem;
+            flex-shrink: 0;
+        }
+
+        .alert-success {
+            background-color: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            color: #10B981;
+        }
+
+        .alert-error {
+            background-color: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            color: #EF4444;
+        }
+
+        .alert-warning {
+            background-color: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+            color: #F59E0B;
+        }
+
+        .alert-info {
+            background-color: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            color: #3B82F6;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
         
         .form-control {
             background-color: var(--bs-body-bg);
             border: 1px solid var(--bs-border-color);
             color: var(--bs-body-color);
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 14px;
+            transition: all 0.2s ease-in-out;
+            height: 300px;
+            resize: vertical;
         }
         
         .form-control:focus {
             background-color: var(--bs-body-bg);
-            border-color: #86b7fe;
-            box-shadow: 0 0 0 0.25rem rgba(13,110,253,.25);
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 0.25rem rgba(99, 102, 241, 0.25);
             color: var(--bs-body-color);
         }
         
         .convert-btn {
-            background: #4CAF50;
+            background: var(--primary-color);
             color: white;
             border: none;
-            padding: 10px 24px;
-            border-radius: 6px;
-            font-size: 16px;
+            padding: 12px 28px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
             cursor: pointer;
             transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            margin: 0 10px;
+            min-width: 200px;
+        }
+        
+        .convert-btn:hover {
+            background: var(--primary-color);
+            opacity: 0.9;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+        }
+        
+        .alert {
+            margin-bottom: 1rem;
+            border-radius: 8px;
+            border: 1px solid transparent;
+            padding: 1rem;
+            animation: fadeInDown 0.5s ease-out;
+        }
+        
+        .alert-success {
+            background-color: rgba(5, 150, 105, 0.1);
+            border-color: rgba(5, 150, 105, 0.2);
+            color: var(--success-color);
+        }
+        
+        .alert-danger {
+            background-color: rgba(220, 38, 38, 0.1);
+            border-color: rgba(220, 38, 38, 0.2);
+            color: var(--danger-color);
+        }
+        
+        .alert-info {
+            background-color: rgba(59, 130, 246, 0.1);
+            border-color: rgba(59, 130, 246, 0.2);
+            color: var(--info-color);
+        }
+        
+        .copy-btn {
+            background: var(--secondary-color);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
             display: inline-flex;
             align-items: center;
             gap: 8px;
         }
         
-        .convert-btn:hover {
-            background: #45a049;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-        
-        .convert-btn i {
-            font-size: 1.2em;
-        }
-        
-        .alert {
-            margin-bottom: 1rem;
-            border-radius: 6px;
-            border: none;
-        }
-        
-        .alert-success {
-            background-color: #d4edda;
-            color: #155724;
-        }
-        
-        .alert-danger {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-        
-        .alert-info {
-            background-color: #cce5ff;
-            color: #004085;
-        }
-        
-        .copy-btn {
-            background: #6c757d;
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 4px;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-        
         .copy-btn:hover {
-            background: #5a6268;
+            background: var(--secondary-color);
+            opacity: 0.9;
             transform: translateY(-1px);
-        }
-        
-        .copy-btn i {
-            font-size: 1.1em;
+            box-shadow: 0 2px 8px rgba(107, 114, 128, 0.3);
         }
 
-        .modal {
+        .config-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 2rem;
+            border: 1px solid rgba(229, 231, 235, 0.1);
+        }
+
+        .config-section-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .config-section-header i {
+            font-size: 1.5rem;
+            margin-right: 0.75rem;
+            color: var(--primary-color);
+        }
+
+        .config-section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--bs-body-color);
+            margin: 0;
+        }
+
+        .button-group {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 2rem;
+            flex-wrap: wrap;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* 模态对话框样式 */
+        .message-modal {
             display: none;
             position: fixed;
+            top: 24px;
+            right: 24px;
+            background: var(--bs-body-bg);
+            border-radius: 12px;
+            padding: 16px 20px;
+            min-width: 300px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
             z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.5);
+            animation: slideInRight 0.3s ease-out;
+            border: 1px solid rgba(229, 231, 235, 0.1);
         }
-        .modal-content {
-            background-color: #fefefe;
-            margin: 15% auto;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            width: 400px;
-            text-align: center;
+        
+        .message-content {
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
-        .modal-title {
-            margin-bottom: 15px;
-            color: #333;
-            font-size: 1.2em;
+        
+        .message-icon {
+            font-size: 20px;
+            flex-shrink: 0;
         }
-        .modal-buttons {
-            margin-top: 20px;
-        }
-        .modal-button {
-            padding: 8px 16px;
-            margin: 0 5px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
+        
+        .message-text {
+            font-size: 14px;
+            color: var(--bs-body-color);
             font-weight: 500;
         }
-        .modal-button.primary {
-            background-color: #3B82F6;
-            color: white;
+                /* Footer styles */
+        .footer {
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid #eee;
+            text-align: center;
+            color: #6c757d;
+            font-size: 0.9rem;
         }
-        .modal-button.secondary {
-            background-color: #64748B;
-            color: white;
+        .footer a {
+            display: inline-flex;
+            align-items: center;
+            color: inherit;
+            text-decoration: none;
+            padding: 0.5rem 0.75rem;
+            margin: 0 0.25rem;
+            border-radius: 6px;
+            transition: all 0.15s ease;
         }
+        .footer a:hover {
+            color: #0d6efd;
+            background-color: #f8f9fa;
+        }
+        .footer .bi-github {
+            margin-right: 0.375rem;
+        }
+
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(100%);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        @keyframes slideOutRight {
+            from {
+                opacity: 1;
+                transform: translateX(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateX(100%);
+            }
+        
+        }
+        
+        .message-success .message-icon { color: var(--success-color); }
+        .message-error .message-icon { color: var(--danger-color); }
+        .message-warning .message-icon { color: var(--warning-color); }
+        .message-info .message-icon { color: var(--info-color); }
+        
+        .message-success { background-color: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); }
+        .message-error { background-color: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); }
+        .message-warning { background-color: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.2); }
+        .message-info { background-color: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="converter-header">
-            <h3>配置转换工具</h3>
-            <p>将 Clash/Mihomo 配置转换为 Xray 协议链接</p>
+            <h3><i class="bi bi-gear-fill"></i> Clash 配置转换工具</h3>
+            <p><i class="bi bi-info-circle-fill me-2"></i> 支持将 Clash/Mihomo 配置转换为 Xray/Sing-box 格式</p>
+            <p><i class="bi bi-check-circle-fill me-2"></i> 支持转换的协议：Ss、Ssr、Vmess、Vless、Tuic、Trojan、Hysteria、Hysteria2</p>
         </div>
 
         <div class="converter-content">
-            <div class="mb-4">
-                <label class="form-label fw-bold">Xray 配置</label>
-                <div class="alert alert-primary" role="alert">
-                    <i class="bi bi-info-circle-fill me-2"></i>
-                    支持转换的协议：SS、SSR、VMess、VLESS、Trojan、Hysteria、Hysteria2、TUIC
-                </div>
+            <div class="config-box">
+
                 <textarea class="form-control" id="convertedConfig" rows="10" readonly 
                     placeholder="转换后的配置将显示在这里..."
                     style="font-family: monospace; white-space: pre-wrap; word-wrap: break-word;"></textarea>
@@ -228,21 +419,28 @@ const converterTemplate = `
                 </div>
             </div>
             
-            <div class="text-center">
+            <div class="button-group">
                 <button class="convert-btn" onclick="convertConfig('xray')">
-                    <i class="bi bi-arrow-right-circle"></i> 开始转换
+                    <i class="bi bi-arrow-right-circle"></i> 转换为 Xray 链接
+                </button>
+                <button class="convert-btn" onclick="convertConfig('singbox')">
+                    <i class="bi bi-box-arrow-right"></i> 转换为 Sing-box 配置
                 </button>
             </div>
         </div>
+    <div class="footer">
+        <a href="https://github.com/faceair/clash-speedtest" target="_blank">
+        <i class="bi bi-github"></i>原项目</a>
+        <a href="https://github.com/OP404OP/clash-speedtest" target="_blank">
+        <i class="bi bi-github"></i>修改版</a>
+        </div>
     </div>
 
-    <!-- 提示对话框 -->
-    <div id="alertModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-title" id="modalMessage"></div>
-            <div class="modal-buttons">
-                <button class="modal-button primary" onclick="closeModal()">确定</button>
-            </div>
+    <!-- 消息提示对话框 -->
+    <div class="message-modal" id="messageModal">
+        <div class="message-content">
+            <i class="bi message-icon" id="messageIcon"></i>
+            <div class="message-text" id="messageText"></div>
         </div>
     </div>
 
@@ -278,7 +476,6 @@ const converterTemplate = `
             showMessage('正在转换节点配置...', 'info');
             const config = jsyaml.load(yamlContent);
             
-            // 处理不同格式的配置文件
             let proxies = [];
             if (config.proxies) {
                 proxies = config.proxies;
@@ -291,21 +488,278 @@ const converterTemplate = `
                 }
             }
             
-            if (!proxies || proxies.length === 0) {
-                throw new Error('未找到可用的代理节点');
+            if (proxies.length === 0) {
+                showMessage('未找到可用的节点配置', 'error');
+                return;
             }
             
+            if (type === 'xray') {
             const convertedContent = proxies.map(proxy => convertToXray(proxy))
                 .filter(Boolean)
                 .join('\n');
-            
-            // 显示转换结果
             document.getElementById('convertedConfig').value = convertedContent;
-            
-            showMessage('转换完成！配置已生成', 'success');
-        } catch (error) {
-            console.error('转换失败:', error);
-            showMessage('转换失败: ' + error.message, 'danger');
+                showMessage('Xray 转换完成！', 'success');
+            } else if (type === 'singbox') {
+                const {inbounds, outbounds} = convertToSingbox(proxies);
+                
+                const config = {
+                    "log": {
+                        "disabled": false,
+                        "level": "warn",
+                        "timestamp": true
+                    },
+                    "dns": {
+                        "servers": [
+                            {
+                                "tag": "default-dns",
+                                "address": "223.5.5.5",
+                                "detour": "direct-out"
+                            },
+                            {
+                                "tag": "system-dns",
+                                "address": "local",
+                                "detour": "direct-out"
+                            },
+                            {
+                                "tag": "block-dns",
+                                "address": "rcode://name_error"
+                            },
+                            {
+                                "tag": "google",
+                                "address": "https://dns.google/dns-query",
+                                "address_resolver": "default-dns",
+                                "address_strategy": "ipv4_only",
+                                "strategy": "ipv4_only",
+                                "client_subnet": "1.0.1.0"
+                            }
+                        ],
+                        "rules": [
+                            {
+                                "outbound": "any",
+                                "server": "default-dns"
+                            },
+                            {
+                                "query_type": "HTTPS",
+                                "server": "block-dns"
+                            },
+                            {
+                                "clash_mode": "direct",
+                                "server": "default-dns"
+                            },
+                            {
+                                "clash_mode": "global",
+                                "server": "google"
+                            },
+                            {
+                                "rule_set": "cnsite",
+                                "server": "default-dns"
+                            },
+                            {
+                                "rule_set": "cnsite-!cn",
+                                "server": "google"
+                            }
+                        ],
+                        "strategy": "ipv4_only",
+                        "disable_cache": false,
+                        "disable_expire": false,
+                        "independent_cache": false,
+                        "final": "google"
+                    },
+                    "inbounds": inbounds,
+                    "outbounds": [
+                        ...outbounds,
+                        {
+                            "type": "urltest",
+                            "tag": "auto",
+                            "outbounds": outbounds.map(item => item.tag),
+                            "url": "https://www.google.com/generate_204",
+                            "interval": "1m",
+                            "tolerance": 50,
+                            "interrupt_exist_connections": false
+                        },
+                        {
+                            "type": "selector",
+                            "tag": "select",
+                            "outbounds": outbounds.map(item => item.tag),
+                            "default": outbounds[0]?.tag || "auto",
+                            "interrupt_exist_connections": false
+                        },
+                        {
+                            "type": "selector",
+                            "tag": "解锁节点",
+                            "outbounds": outbounds.map(item => item.tag),
+                            "default": outbounds[0]?.tag || "",
+                            "interrupt_exist_connections": false
+                        },
+                        {
+                            "type": "direct",
+                            "tag": "direct-out",
+                            "routing_mark": 100
+                        },
+                        {
+                            "type": "block",
+                            "tag": "block-out"
+                        },
+                        {
+                            "type": "dns",
+                            "tag": "dns-out"
+                        }
+                    ],
+                    "route": {
+                        "rules": [
+                            {
+                                "protocol": "dns",
+                                "outbound": "dns-out"
+                            },
+                            {
+                                "protocol": "quic",
+                                "outbound": "block-out"
+                            },
+                            {
+                                "clash_mode": "block",
+                                "outbound": "block-out"
+                            },
+                            {
+                                "clash_mode": "direct",
+                                "outbound": "direct-out"
+                            },
+                            {
+                                "clash_mode": "global",
+                                "outbound": "select"
+                            },
+                            {
+                                "rule_set": [
+                                    "geosite-netflix",
+                                    "geosite-disney",
+                                    "geosite-youtube",
+                                    "geosite-google",
+                                    "geosite-spotify",
+                                    "geosite-reddit"
+                                ],
+                                "outbound": "select"
+                            },
+                            {
+                                "rule_set": [
+                                    "geosite-openai"
+                                ],
+                                "outbound": ""
+                            },
+                            {
+                                "rule_set": [
+                                    "cnip",
+                                    "cnsite"
+                                ],
+                                "outbound": "direct-out"
+                            },
+                            {
+                                "rule_set": "cnsite-!cn",
+                                "outbound": "select"
+                            }
+                        ],
+                        "rule_set": [
+                            {
+                                "type": "remote",
+                                "tag": "cnsite-!cn",
+                                "format": "binary",
+                                "url": "https://github.com/SagerNet/sing-geosite/raw/rule-set/geosite-geolocation-!cn.srs",
+                                "download_detour": "auto"
+                            },
+                            {
+                                "type": "remote",
+                                "tag": "cnip",
+                                "format": "binary",
+                                "url": "https://github.com/MetaCubeX/meta-rules-dat/raw/sing/geo-lite/geoip/cn.srs",
+                                "download_detour": "auto"
+                            },
+                            {
+                                "type": "remote",
+                                "tag": "cnsite",
+                                "format": "binary",
+                                "url": "https://github.com/MetaCubeX/meta-rules-dat/raw/sing/geo-lite/geosite/cn.srs",
+                                "download_detour": "auto"
+                            },
+                            {
+                                "tag": "geosite-openai",
+                                "type": "remote",
+                                "format": "binary",
+                                "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-openai.srs",
+                                "download_detour": "auto"
+                            },
+                            {
+                                "tag": "geosite-netflix",
+                                "type": "remote",
+                                "format": "binary",
+                                "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-netflix.srs",
+                                "download_detour": "auto"
+                            },
+                            {
+                                "tag": "geosite-disney",
+                                "type": "remote",
+                                "format": "binary",
+                                "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-disney.srs",
+                                "download_detour": "auto"
+                            },
+                            {
+                                "tag": "geosite-youtube",
+                                "type": "remote",
+                                "format": "binary",
+                                "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-youtube.srs",
+                                "download_detour": "auto"
+                            },
+                            {
+                                "tag": "geosite-google",
+                                "type": "remote",
+                                "format": "binary",
+                                "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-google.srs",
+                                "download_detour": "auto"
+                            },
+                            {
+                                "tag": "geosite-spotify",
+                                "type": "remote",
+                                "format": "binary",
+                                "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-spotify.srs",
+                                "download_detour": "auto"
+                            },
+                            {
+                                "tag": "geosite-reddit",
+                                "type": "remote",
+                                "format": "binary",
+                                "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-reddit.srs",
+                                "download_detour": "auto"
+                            }
+                        ],
+                        "auto_detect_interface": true,
+                        "final": "select"
+                    },
+                    "experimental": {
+                        "cache_file": {
+                            "enabled": true,
+                            "path": "cache.db",
+                            "store_fakeip": true
+                        },
+                        "clash_api": {
+                            "external_controller": "127.0.0.1:9090",
+                            "external_ui": "ui",
+                            "external_ui_download_url": "",
+                            "external_ui_download_detour": "auto",
+                            "default_mode": "rule"
+                        }
+                    },
+                    "ntp": {
+                        "enabled": true,
+                        "server": "time.apple.com",
+                        "server_port": 123,
+                        "interval": "30m",
+                        "detour": "direct-out"
+                    }
+                };
+                
+                document.getElementById('convertedConfig').value = JSON.stringify(config, null, 4);
+                showMessage('Sing-box 转换完成！', 'success');
+            }
+        } catch (err) {
+            console.error(err);
+            showMessage('转换失败: ' + err.message, 'error');
         }
     }
 
@@ -475,21 +929,164 @@ const converterTemplate = `
                 return null;
         }
     }
+    
+    // 转换代理节点到 Sing-box 格式
+    function convertToSingbox(proxies) {
+        let outbounds = [];
+        
+        for (const proxy of proxies) {
+            if (!proxy || !proxy.type || !proxy.server || !proxy.port) {
+                continue;
+            }
+            
+            let outbound = null;
+            
+            switch (proxy.type) {
+                case 'vless':
+                    outbound = {
+                        "type": "vless",
+                        "tag": proxy.name,
+                        "server": proxy.server,
+                        "server_port": parseInt(proxy.port),
+                        "uuid": proxy.uuid,
+                        "packet_encoding": "xudp",
+                        "tls": {
+                            "enabled": proxy.tls,
+                            "server_name": proxy.servername || proxy.sni,
+                            "insecure": false,
+                            "utls": {"enabled": true, "fingerprint": proxy["client-fingerprint"]},
+                        },
+                    };
+                    if (proxy["reality-opts"]) {
+                        outbound["tls"]["reality"] = {
+                            "enabled": true,
+                            "public_key": proxy["reality-opts"]["public-key"],
+                            "short_id": proxy["reality-opts"]["short-id"],
+                        };
+                         outbound["flow"] = proxy.flow;
+                    } else if (proxy.tls) {
+                         if (proxy.network == "ws") {
+                             outbound["transport"] = {
+                                "type": "ws",
+                                "path": proxy["ws-opts"]?.path || proxy.ws_path || "/",
+                                "headers": {"Host": proxy["ws-opts"]?.headers?.Host},
+                            };
+                         } else if (proxy.network == "tcp") {
+                             outbound["flow"] = proxy.flow;
+                         }
+                    }
+                    break;
+                case 'vmess':
+                    outbound = {
+                        "type": "vmess",
+                        "tag": proxy.name,
+                        "server": proxy.server,
+                        "server_port": parseInt(proxy.port),
+                        "uuid": proxy.uuid,
+                        "security": proxy.cipher || "auto",
+                        "alter_id": proxy.alterId || 0,
+                    };
+                    break;
+                case 'ss':
+                    outbound = {
+                        "type": "shadowsocks",
+                        "tag": proxy.name,
+                        "server": proxy.server,
+                        "server_port": parseInt(proxy.port),
+                        "method": proxy.cipher,
+                        "password": proxy.password,
+                    };
+                    break;
+                case 'trojan':
+                     outbound = {
+                        "type": "trojan",
+                        "tag": proxy.name,
+                        "server": proxy.server,
+                        "server_port": parseInt(proxy.port),
+                        "password": proxy.password,
+                        "tls": {
+                            "enabled": true,
+                            "server_name": proxy.servername || proxy.sni,
+                            "insecure": false,
+                        },
+                    };
+                    break;
+                 case 'hysteria2':
+                    outbound = {
+                        "type": "hysteria2",
+                        "tag": proxy.name,
+                        "server": proxy.server,
+                        "server_port": parseInt(proxy.port),
+                        "password": proxy.password,
+                        "tls": {
+                            "enabled": true,
+                            "server_name": proxy.sni,
+                            "insecure": proxy["skip-cert-verify"] == true,
+                        },
+                    };
+                    break;
+                default:
+                    console.warn('Unsupported proxy type:', proxy.type);
+                    continue;
+            }
+            
+            if (outbound) {
+                outbounds.push(outbound);
+            }
+        }
+        
+        const inbounds = [
+            {
+              "type": "tun",
+              "inet4_address": "172.19.0.1/30",
+              "inet6_address": "fd00::1/126",
+              "auto_route": true,
+              "strict_route": true,
+              "sniff": true,
+              "sniff_override_destination": true,
+              "domain_strategy": "prefer_ipv4"
+            }
+          ];
+        
+        return {inbounds, outbounds};
+    }
 
     // 显示消息
     function showMessage(message, type) {
-        const alertDiv = document.createElement('div');
-        alertDiv.className = 'alert alert-' + type + ' alert-dismissible fade show';
-        alertDiv.role = 'alert';
-        alertDiv.innerHTML = 
-            message +
-            '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
+        const modal = document.getElementById('messageModal');
+        const messageText = document.getElementById('messageText');
+        const messageIcon = document.getElementById('messageIcon');
         
-        const container = document.querySelector('.container');
-        container.insertBefore(alertDiv, container.firstChild);
+        // 根据类型选择图标
+        let icon = '';
+        switch(type) {
+            case 'success':
+                icon = 'bi-check-circle-fill';
+                break;
+            case 'error':
+            case 'danger':
+                icon = 'bi-x-circle-fill';
+                break;
+            case 'warning':
+                icon = 'bi-exclamation-triangle-fill';
+                break;
+            case 'info':
+                icon = 'bi-info-circle-fill';
+                break;
+        }
+        
+        messageIcon.className = 'bi ' + icon + ' message-icon';
+        messageText.textContent = message;
+        modal.className = 'message-modal message-' + (type === 'danger' ? 'error' : type);
+        
+        modal.style.display = 'block';
         
         setTimeout(() => {
-            alertDiv.remove();
+            modal.style.animation = 'slideOutRight 0.3s ease-out';
+            setTimeout(() => {
+                modal.style.display = 'none';
+                modal.style.animation = 'slideInRight 0.3s ease-out';
+            }, 300);
         }, 3000);
     }
 
