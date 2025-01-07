@@ -23,20 +23,21 @@ import (
 
 var (
 	configPathsConfig = flag.String("c", "", "配置文件路径，支持 http(s) 链接")
-	filterRegexConfig = flag.String("f", ".+", "使用正则表达式过滤节点名称")
+	filterRegexConfig = flag.String("f", ".+", "使用正则表达式过滤节点名称(例如：-f 'HK|港')")
+	blockKeywords     = flag.String("b", "", "使用关键词屏蔽节点，多个关键词用竖线|分隔(例如：-b '倍率|x1|1x|0.5x|试用|体验')")
 	serverURL         = flag.String("server-url", "https://speed.cloudflare.com", "测速服务器地址")
 	downloadSize      = flag.Int("download-size", 50*1024*1024, "下载测试的数据大小")
 	uploadSize        = flag.Int("upload-size", 20*1024*1024, "上传测试的数据大小")
 	timeout           = flag.Duration("timeout", time.Second*5, "测试超时时间")
 	concurrent        = flag.Int("concurrent", 4, "下载并发数")
-	outputPath        = flag.String("output", "", "输出配置文件路径")
+	outputPath        = flag.String("output", "", "输出配置文件路径+名称")
 	maxLatency        = flag.Duration("max-latency", 0, "(如果没有指定，默认过滤延迟大于0的节点)延迟过滤阈值，单位 ms，大于此值的节点将被过滤，例如 -max-latency 1000ms 表示过滤延迟大于 1000 ms 的节点")
 	minSpeed          = flag.Float64("min-speed", 0, "(如果没有指定，默认过滤延迟大于0的节点)速度过滤阈值，单位 MB/s，小于此值的节点将被过滤，例如 -min-speed 10 表示过滤速度小于 10 MB/s 的节点")
 	enableUnlock      = flag.Bool("unlock", false, "启用流媒体解锁检测(启用OUTPUT时，默认只保存延迟大于0的节点)")
 	unlockConcurrent  = flag.Int("unlock-concurrent", 5, "解锁测试并发数，默认 5 (仅在-unlock模式下有效)")
-	debugMode         = flag.Bool("debug", false, "启用解锁测试的调试模式(仅在-unlock模式下有效)")
+	debugMode         = flag.Bool("debug", false, "启用调试模式，可用于查看节点屏蔽信息或解锁测试详情")
 	enableRisk        = flag.Bool("risk", false, "启用解锁测试时的 IP 风险检测(仅在-unlock模式下有效)")
-	htmlReport        = flag.String("html", "", "输出 HTML 报告的路径(默认5秒自动刷新，支持手动刷新)")
+	htmlReport        = flag.String("html", "", "输出 HTML 报告的路径+名称(默认5秒自动刷新，支持手动刷新)")
 	fastMode          = flag.Bool("fast", false, "快速测试模式，仅测试节点延迟")
 )
 
@@ -45,7 +46,7 @@ const (
 	colorGreen  = "\033[32m"
 	colorYellow = "\033[33m"
 	colorReset  = "\033[0m"
-	Version     = "1.6.2"
+	Version     = "1.6.3"
 )
 
 func main() {
@@ -58,13 +59,14 @@ func main() {
 		log.Fatalln("please specify the configuration file")
 	}
 
-	if *debugMode && !*enableUnlock {
-		log.Fatalln("debug mode can only be used with unlock testing enabled")
+	if *debugMode && !*enableUnlock && *blockKeywords == "" {
+		log.Fatalln("debug mode can only be used with unlock testing or node blocking enabled")
 	}
 
 	speedTester := speedtester.New(&speedtester.Config{
 		ConfigPaths:      *configPathsConfig,
 		FilterRegex:      *filterRegexConfig,
+		BlockRegex:       *blockKeywords,
 		ServerURL:        *serverURL,
 		DownloadSize:     *downloadSize,
 		UploadSize:       *uploadSize,
