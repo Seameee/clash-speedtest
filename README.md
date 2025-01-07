@@ -8,15 +8,21 @@ Features:
 3. 不依赖额外的 Clash/Mihomo 进程实例，单一工具即可完成测试
 4. 代码简单而且开源，不发布构建好的二进制文件，保证你的节点安全
 5. 支持流媒体解锁检测功能，可以测试 40+ 个主流流媒体平台
-6. 支持显示节点的地理位置信息和 IP 纯净度
+6. 支持显示节点的地理位置信息和 IP 纯净度，支持 IP 历史记录检测
 7. 支持显示节点延迟、抖动和丢包率
-8. 支持调试模式查看详细的解锁测试信息
+8. 支持调试模式查看详细的解锁测试信息和节点屏蔽信息
 9. 支持自定义并发数，提高测试效率
 10. 在开启 -unlock 模式下，将跳过上传速度和下载速度测试
 11. 支持快速测试模式（-fast），仅测试节点延迟
-12. 支持生成美观的 HTML 报告，包含实时刷新和配置转换功能
-13. 支持节点测试结果的颜色标记，直观显示节点质量
-14. 支持国旗图标显示，美化节点显示效果
+12. 支持生成美观的 HTML 报告
+    - 支持实时刷新和配置转换功能
+    - 支持表格排序和过滤
+    - 支持一键导出测试结果截图
+    - 支持配置转换（Clash/Mihomo -> sing-box/Xray）
+13.支持节点测试结果的颜色标记，直观显示节点状态
+14.支持国旗图标显示，美化节点显示效果
+15.支持关键词屏蔽功能，可以屏蔽不需要的节点（如倍率节点等）
+16.支持 IP 检测的 Cloudflare 验证伪装，提高检测准确性
 
 <img width="1332" alt="image" src="https://github.com/user-attachments/assets/fdc47ec5-b626-45a3-a38a-6d88c326c588">
 
@@ -41,10 +47,12 @@ Features:
 
 <img width="1332" alt="image" src="https://github.com/OP404OP/clash-speedtest/blob/ab8b8b356cb18726c6b07ecd2a8d2620b5f32ed0/2024-12-26-09.png?raw=true">
 
-
-- HTML报告配置转换（Clash/Mihomo -> Xray）
+- HTML报告配置转换（Clash/Mihomo -> Xray/sing-box）
 
 <img width="1332" alt="image" src="https://github.com/OP404OP/clash-speedtest/blob/ab8b8b356cb18726c6b07ecd2a8d2620b5f32ed0/html_convert.png?raw=true">
+
+- -b '倍率|x' -debug：屏蔽指定关键词节点并开启DEBUG模式
+
 
 ## 使用方法
 
@@ -60,6 +68,8 @@ Usage of clash-speedtest:
         configuration file path, also support http(s) url
   -f string
         filter proxies by name, use regexp (default ".*")
+  -b string
+        block proxies by keywords, use | to separate multiple keywords (example: -b 'rate|x1|1x')
   -server-url string
         server url for testing proxies (default "https://speed.cloudflare.com")
   -download-size int
@@ -81,7 +91,7 @@ Usage of clash-speedtest:
   -unlock-concurrent int
         concurrent size for unlock testing (default 5)
   -debug
-        enable debug mode for unlock testing
+        enable debug mode (for unlock testing and node blocking)
   -risk
         enable IP risk checking when unlock testing is enabled
   -html string
@@ -108,11 +118,26 @@ Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 # 3. 当然你也可以混合使用
 > clash-speedtest -c "https://domain.com/api/v1/client/subscribe?token=secret&flag=meta,/home/.config/clash/config.yaml"
 
-# 4. 筛选出延迟低于 800ms 且下载速度大于 5MB/s 的节点，并输出到 filtered.yaml
+# 4. 屏蔽指定关键词节点并查看详细信息
+> clash-speedtest -c config.yaml -b "倍率|x1|1x" -debug
+Debug 模式已启用
+[Debug] 节点统计信息:
+[Debug] 总节点数: 47
+[Debug] 已屏蔽节点数: 16
+[Debug] 剩余节点数: 31
+[Debug] 被屏蔽的节点:
+[Debug] - 🇯🇵 日本W01 | x0.8 (匹配关键词: x)
+[Debug] - 🇯🇵 日本W06 | 下载专用 | x0.01 (匹配关键词: x)
+[Debug] - 🇯🇵 日本W04 | x0.8 (匹配关键词: x)
+[Debug] - 🇯🇵 日本W07 | x0.8 (匹配关键词: x)
+[Debug] - 🇭🇰 香港W06 | x0.8 (匹配关键词: x)
+[Debug] - 🇭🇰 香港W08 | x0.8 (匹配关键词: x)
+
+# 5. 筛选出延迟低于 800ms 且下载速度大于 5MB/s 的节点，并输出到 filtered.yaml
 > clash-speedtest -c "https://domain.com/api/v1/client/subscribe?token=secret&flag=meta" -output filtered.yaml -max-latency 800ms -min-speed 5
 # 筛选后的配置文件可以直接粘贴到 Clash/Mihomo 中使用，或是贴到 Github\Gist 上通过 Proxy Provider 引用。
 
-# 5. 启用流媒体解锁检测
+# 6. 启用流媒体解锁检测
 > clash-speedtest -c config.yaml -unlock
 # 此命令将测试节点对各个流媒体平台的解锁情况，支持以下功能：
 # - 测试 40+ 个主流流媒体平台，包括 Netflix、Disney+、HBO Max、Prime Video 等
@@ -123,19 +148,20 @@ Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 #   > clash-speedtest -c config.yaml -unlock -f 'HK|港'  # 只测试香港节点
 #   > clash-speedtest -c config.yaml -unlock -f 'US|美'  # 只测试美国节点
 
-# 6. 启用调试模式查看详细解锁信息
+# 7. 启用调试模式查看详细解锁信息
 > clash-speedtest -c config.yaml -unlock -debug
 # 在解锁检测过程中显示详细的测试信息，包括：
 # - 每个节点测试的具体流媒体平台
 # - 测试结果（成功/失败）
 # - 解锁区域
 # - 错误信息（如果有）
+# - 节点统计信息（如果有）
 
-# 7. 控制解锁测试并发数
+# 8. 控制解锁测试并发数
 > clash-speedtest -c config.yaml -unlock -unlock-concurrent 10
 # 默认并发数为 5，可以根据需要调整以平衡速度和稳定性
 
-# 8. 启用 IP 纯净度检测
+# 9. 启用 IP 纯净度检测
 > clash-speedtest -c config.yaml -unlock -risk
 # 此命令将检测节点 IP 的纯净度，显示格式为：[分数 级别]
 # - [0 纯净]：绿色，表示 IP 非常干净
@@ -144,7 +170,7 @@ Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 # - [-- 非常差]：红色，表示 IP 风险非常高
 # - [值 未知]：白色，表示无法获取风险信息
 
-# 9. 生成 HTML 报告
+# 10. 生成 HTML 报告
 > clash-speedtest -c config.yaml -html report.html
 # 此命令将生成一个美观的 HTML 报告，支持以下功能：
 # - 实时自动刷新测试结果(5秒刷新一次)
@@ -152,8 +178,9 @@ Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 # - 配置转换功能
 # - 颜色标记显示节点质量
 # - 国旗图标显示
+# - 生成测试报告长截图
 
-# 10. 快速测试模式
+# 11. 快速测试模式
 > clash-speedtest -c config.yaml -fast
 # 此命令将只测试节点延迟，跳过其他测试项目，适用于：
 # - 快速检查节点是否可用
