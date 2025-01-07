@@ -68,13 +68,15 @@ const htmlTemplate = `
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>节点报告</title>
+    <title>订阅报告</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <!-- Flag Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css">
+    <!-- html2canvas -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <style>
 		
         :root {
@@ -357,11 +359,44 @@ const htmlTemplate = `
         .footer .bi-github {
             margin-right: 0.375rem;
         }
+        /* 添加排序图标样式 */
+        .sortable {
+            cursor: pointer;
+            position: relative;
+            padding-right: 18px !important;
+        }
+        .sortable:before,
+        .sortable:after {
+            content: '';
+            position: absolute;
+            right: 4px;
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            opacity: 0.3;
+        }
+        .sortable:before {
+            top: 40%;
+            border-bottom: 4px solid #000;
+        }
+        .sortable:after {
+            bottom: 40%;
+            border-top: 4px solid #000;
+        }
+        .sortable.asc:before {
+            opacity: 1;
+        }
+        .sortable.desc:after {
+            opacity: 1;
+        }
     </style>
     <!-- Bootstrap Bundle JS (includes Popper) -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <!-- YAML Parser -->
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+    <!-- html2canvas -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -377,10 +412,10 @@ const htmlTemplate = `
             </div>
         </div>
         <div class="header">
-            <h3 class="title">节点报告</h3>
+            <h3 class="title">订阅报告</h3>
             <div class="subtitle">
-                <span>测试订阅：{{.ConfigPath}}</span>
-                <span>输出订阅：{{if eq .OutputConfig ""}}无{{else}}{{.OutputConfig}}{{end}}</span>
+                <span>测试订阅：{{if gt (len .ConfigPath) 15}}{{slice .ConfigPath 0 15}}...{{else}}{{.ConfigPath}}{{end}}</span>
+                <span>输出订阅：{{if eq .OutputConfig ""}}无{{else if gt (len .OutputConfig) 15}}{{slice .OutputConfig 0 15}}...{{else}}{{.OutputConfig}}{{end}}</span>
                 <span>数量：({{len .Results}}/{{.TotalCount}})</span>
                 <span class="update-info">最后更新时间: {{.LastUpdate.Format "2006-01-02 15:04:05"}}</span>
             </div>
@@ -393,7 +428,7 @@ const htmlTemplate = `
                 <div class="d-inline-block" 
                     data-bs-toggle="tooltip"
                     data-bs-placement="top"
-                    title="{{if eq .OutputConfig ""}}未指定输出配置文件{{else if lt (len .Results) .TotalCount}}测试未完成，请等待{{else}}转换为Xray链接{{end}}">
+                    title="{{if eq .OutputConfig ""}}未指定输出配置文件{{else if lt (len .Results) .TotalCount}}测试未完成，请等待{{else}}转换为Xray/Sing-box{{end}}">
                     <button class="btn btn-secondary" 
                         onclick="openConverter('{{.OutputConfig}}')"
                         {{if or (lt (len .Results) .TotalCount) (eq .OutputConfig "")}}
@@ -401,6 +436,19 @@ const htmlTemplate = `
                         {{end}}
                         style="cursor: {{if or (lt (len .Results) .TotalCount) (eq .OutputConfig "")}}not-allowed{{else}}pointer{{end}};">
                         <i class="bi bi-arrow-left-right"></i> 配置转换
+                    </button>
+                </div>
+                <div class="d-inline-block" 
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="top"
+                    title="{{if lt (len .Results) .TotalCount}}测试未完成，请等待{{else}}为报告生成长截图{{end}}">
+                    <button class="btn btn-success" 
+                        onclick="generateScreenshot()"
+                        {{if lt (len .Results) .TotalCount}}
+                        disabled 
+                        {{end}}
+                        style="cursor: {{if lt (len .Results) .TotalCount}}not-allowed{{else}}pointer{{end}};">
+                        <i class="bi bi-camera"></i> 生成截图
                     </button>
                 </div>
             </div>
@@ -411,27 +459,27 @@ const htmlTemplate = `
                     <tr>
                         {{if .FastMode}}
                         <th>序号</th>
-                        <th>节点</th>
+                        <th>名称</th>
                         <th>协议</th>
-                        <th>延迟</th>
+                        <th class="sortable" onclick="sortTable(3, 'number')">延迟</th>
                         {{else if .EnableUnlock}}
                         <th>序号</th>
-                        <th>节点</th>
+                        <th>名称</th>
                         <th>协议</th>
-                        <th>延迟</th>
+                        <th class="sortable" onclick="sortTable(3, 'number')">延迟</th>
                         <th>抖动</th>
                         <th>丢包率</th>
                         <th>地理/风险</th>
                         <th>流媒体</th>
                         {{else}}
                         <th>序号</th>
-                        <th>节点</th>
+                        <th>名称</th>
                         <th>协议</th>
-                        <th>延迟</th>
+                        <th class="sortable" onclick="sortTable(3, 'number')">延迟</th>
                         <th>抖动</th>
                         <th>丢包率</th>
-                        <th>下载速度</th>
-                        <th>上传速度</th>
+                        <th class="sortable" onclick="sortTable(6, 'speed')">下载速度</th>
+                        <th class="sortable" onclick="sortTable(7, 'speed')">上传速度</th>
                         {{end}}
                     </tr>
                 </thead>
@@ -523,6 +571,84 @@ const htmlTemplate = `
     </div>
     <script>
         let refreshTimer = null;
+        let currentSortColumn = -1;
+        let isAscending = true;
+
+        // 解析速度值为数字（用于排序）
+        function parseSpeedValue(speed) {
+            if (speed === 'N/A') return -1;
+            const matches = speed.match(/([\d.]+)\s*(B\/s|KB\/s|MB\/s|GB\/s|TB\/s)/);
+            if (!matches) return -1;
+            
+            const value = parseFloat(matches[1]);
+            const unit = matches[2];
+            
+            const multipliers = {
+                'B/s': 1,
+                'KB/s': 1024,
+                'MB/s': 1024 * 1024,
+                'GB/s': 1024 * 1024 * 1024,
+                'TB/s': 1024 * 1024 * 1024 * 1024
+            };
+            
+            return value * multipliers[unit];
+        }
+
+        // 解析延迟值为数字（用于排序）
+        function parseLatencyValue(latency) {
+            if (latency === 'N/A') return Number.MAX_VALUE;
+            return parseInt(latency.match(/\d+/)[0]);
+        }
+
+        // 排序表格
+        function sortTable(columnIndex, type) {
+            const table = document.querySelector('table');
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            const header = table.querySelector('th:nth-child(' + (columnIndex + 1) + ')');
+            
+            // 切换排序方向
+            if (currentSortColumn === columnIndex) {
+                isAscending = !isAscending;
+            } else {
+                isAscending = true;
+                // 重置其他表头的排序状态
+                table.querySelectorAll('th').forEach(function(th) {
+                    th.classList.remove('asc', 'desc');
+                });
+            }
+            
+            currentSortColumn = columnIndex;
+            
+            // 更新表头样式
+            header.classList.remove('asc', 'desc');
+            header.classList.add(isAscending ? 'asc' : 'desc');
+
+            // 排序行
+            rows.sort(function(a, b) {
+                const aValue = a.cells[columnIndex].textContent.trim();
+                const bValue = b.cells[columnIndex].textContent.trim();
+                
+                let comparison = 0;
+                if (type === 'speed') {
+                    comparison = parseSpeedValue(aValue) - parseSpeedValue(bValue);
+                } else if (type === 'number') {
+                    comparison = parseLatencyValue(aValue) - parseLatencyValue(bValue);
+                }
+                
+                return isAscending ? comparison : -comparison;
+            });
+
+            // 重新插入排序后的行
+            rows.forEach(function(row) {
+                tbody.appendChild(row);
+            });
+            
+            // 更新序号
+            rows.forEach(function(row, index) {
+                row.cells[0].textContent = (index + 1) + '.';
+            });
+        }
 
         // 初始化所有的 tooltips
         document.addEventListener('DOMContentLoaded', function() {
@@ -552,7 +678,7 @@ const htmlTemplate = `
 
             // 检查是否需要继续刷新
             if (isTestFinished()) {
-                console.log('测试已完成，停止刷新');
+                console.log('测试完成，停止刷新');
                 return;
             }
 
@@ -583,7 +709,7 @@ const htmlTemplate = `
 
         // 添加错误消息处理
         function handleTestError() {
-            const errorDiv = document.createElement('div');
+            var errorDiv = document.createElement('div');
             errorDiv.className = 'error-message';
             errorDiv.style.display = 'none';
             document.body.appendChild(errorDiv);
@@ -598,13 +724,187 @@ const htmlTemplate = `
         function openConverter(configPath) {
             window.open('http://127.0.0.1:8080/convert?config=' + encodeURIComponent(configPath), 
                 'ConfigConverter', 
-                'width=1178,height=904,resizable=yes,scrollbars=yes');
+                'width=881,height=925,resizable=yes,scrollbars=yes');
+        }
+
+        // 停止刷新
+        function stopRefresh() {
+            if (refreshTimer) {
+                clearInterval(refreshTimer);
+                refreshTimer = null;
+            }
+        }
+
+        // 生成长截图
+        async function generateScreenshot() {
+            const toastContainer = document.createElement('div');
+            toastContainer.className = 'toast-container position-fixed top-50 start-50 translate-middle';
+            toastContainer.style.zIndex = '9999';
+            document.body.appendChild(toastContainer);
+
+            const toast = document.createElement('div');
+            toast.className = 'toast align-items-center text-bg-primary border-0';
+            toast.setAttribute('role', 'alert');
+            toast.setAttribute('aria-live', 'assertive');
+            toast.setAttribute('aria-atomic', 'true');
+            toast.style.minWidth = '300px';
+            toast.style.boxShadow = '0 0.5rem 1rem rgba(0, 0, 0, 0.15)';
+            
+            toast.innerHTML = '<div class="d-flex"><div class="toast-body d-flex align-items-center"><div class="spinner-border spinner-border-sm me-2" role="status"><span class="visually-hidden">Loading...</span></div><span>正在生成截图...</span></div></div>';
+            toastContainer.appendChild(toast);
+            const bsToast = new bootstrap.Toast(toast, { autohide: false });
+            bsToast.show();
+
+            try {
+                // 创建临时容器
+                const tempContainer = document.createElement('div');
+                tempContainer.style.backgroundColor = '#ffffff';
+                tempContainer.style.padding = '20px';
+                
+                // 添加标题信息
+                const headerInfo = document.createElement('div');
+                headerInfo.style.textAlign = 'center';
+                headerInfo.style.marginBottom = '18px';
+                headerInfo.style.fontFamily = ' PingFangSC-Medium, PingFang SC,system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+                
+                const titleDiv = document.createElement('div');
+                titleDiv.style.fontSize = '18px';
+                titleDiv.style.fontWeight = 'bold';
+                titleDiv.style.marginBottom = '10px';
+                titleDiv.textContent = 'Clash Speedtest 1.6.3';
+                headerInfo.appendChild(titleDiv);
+                
+                const updateTime = document.querySelector('.update-info').textContent.split(': ')[1];
+                const countText = document.querySelector('.subtitle').textContent;
+                const nodeCountMatch = countText.match(/数量：\((\d+)\/(\d+)\)/);
+                const nodeCount = nodeCountMatch ? nodeCountMatch[1] + '/' + nodeCountMatch[2] : 'N/A';
+                
+                const infoDiv = document.createElement('div');
+                infoDiv.style.fontSize = '10px';
+                infoDiv.style.color = '#666';
+                infoDiv.textContent = '测试时间: ' + updateTime + ' | 数量: ' + nodeCount;
+                headerInfo.appendChild(infoDiv);
+                
+                tempContainer.appendChild(headerInfo);
+
+                // 直接复制整个表格容器
+                const originalTable = document.querySelector('.table-responsive');
+                const tableClone = originalTable.cloneNode(true);
+                tempContainer.appendChild(tableClone);
+                
+                // 设置时容器样式
+                tempContainer.style.position = 'fixed';
+                tempContainer.style.left = '-9999px';
+                tempContainer.style.top = '0';
+                document.body.appendChild(tempContainer);
+
+                // 等待一会以确保样式应用
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                // 生成截图
+                const canvas = await html2canvas(tempContainer, {
+                    scale: 2,
+                    logging: false,
+                    useCORS: true,
+                    allowTaint: true,
+                    backgroundColor: '#ffffff',
+                    scrollX: 0,
+                    scrollY: 0,
+                    onclone: async function(clonedDoc) {
+                        // 确保容器有足够的空间
+                        const container = clonedDoc.querySelector('.table-responsive');
+                        if (container) {
+                            container.style.width = 'auto';
+                            container.style.minWidth = '100%';
+                            container.style.overflow = 'visible';
+                        }
+
+                        const flags = clonedDoc.querySelectorAll('.fi');
+                        const loadPromises = [];
+                        
+                        flags.forEach(flag => {
+                            const countryCode = Array.from(flag.classList)
+                                .find(cls => cls.startsWith('fi-'))
+                                ?.replace('fi-', '');
+                            if (countryCode) {
+                                const wrapper = document.createElement('div');
+                                wrapper.style.cssText = 'display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 15px; vertical-align: middle; margin-right: 4px;';
+                                
+                                const loadPromise = fetch('https://cdn.jsdelivr.net/npm/flag-icons@6.11.0/flags/4x3/' + countryCode + '.svg')
+                                    .then(response => response.text())
+                                    .then(svgContent => {
+                                        wrapper.innerHTML = svgContent;
+                                        const svg = wrapper.querySelector('svg');
+                                        if (svg) {
+                                            svg.style.cssText = 'width: 100%; height: 100%;';
+                                            svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+                                        }
+                                    })
+                                    .catch(() => {
+                                        // 如果主CDN失败，尝试备用CDN
+                                        return fetch('https://unpkg.com/flag-icons@6.11.0/flags/4x3/' + countryCode + '.svg')
+                                            .then(response => response.text())
+                                            .then(svgContent => {
+                                                wrapper.innerHTML = svgContent;
+                                                const svg = wrapper.querySelector('svg');
+                                                if (svg) {
+                                                    svg.style.cssText = 'width: 100%; height: 100%;';
+                                                    svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+                                                }
+                                            });
+                                    });
+                                
+                                loadPromises.push(loadPromise);
+                                flag.parentNode.replaceChild(wrapper, flag);
+                            }
+                        });
+                        
+                        // 等待所有图片加载完成
+                        await Promise.all(loadPromises);
+                        // 额外等待一小段时间确保渲染完成
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                });
+
+                // 移除临时容器
+                document.body.removeChild(tempContainer);
+
+                // 下载截图
+                const link = document.createElement('a');
+                const now = new Date();
+                const timestamp = now.getFullYear() + '-' + 
+                    String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                    String(now.getDate()).padStart(2, '0') + '-' + 
+                    String(now.getHours()).padStart(2, '0') + '-' + 
+                    String(now.getMinutes()).padStart(2, '0') + '-' + 
+                    String(now.getSeconds()).padStart(2, '0');
+                link.download = 'speedtest-result-' + timestamp + '.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+
+                // 显示成功提示
+                toast.className = 'toast align-items-center text-bg-success border-0';
+                toast.innerHTML = '<div class="d-flex"><div class="toast-body d-flex align-items-center"><i class="bi bi-check-circle-fill me-2"></i><span>截图已生成</span></div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button></div>';
+                setTimeout(function() { bsToast.hide(); }, 2000);
+            } catch (error) {
+                console.error('Screenshot generation failed:', error);
+                toast.className = 'toast align-items-center text-bg-danger border-0';
+                toast.innerHTML = '<div class="d-flex"><div class="toast-body d-flex align-items-center"><i class="bi bi-exclamation-circle-fill me-2"></i><span>截图生成失败: ' + error.message + '</span></div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button></div>';
+                setTimeout(function() { bsToast.hide(); }, 3000);
+            } finally {
+                setTimeout(function() {
+                    if (toastContainer.parentNode) {
+                        toastContainer.parentNode.removeChild(toastContainer);
+                    }
+                }, 3100);
+            }
         }
     </script>
 </body>
 </html>
 `
 
+// NewHTMLReporter creates a new HTML reporter
 func NewHTMLReporter(outputPath string, enableUnlock bool, configPath string, totalCount int, outputConfig string, fastMode bool) (*HTMLReporter, error) {
 	reporter := &HTMLReporter{
 		Results:      make([]*Result, 0),
@@ -621,6 +921,15 @@ func NewHTMLReporter(outputPath string, enableUnlock bool, configPath string, to
 	tmpl, err := template.New("html").Funcs(template.FuncMap{
 		"add": func(a, b int) int {
 			return a + b
+		},
+		"slice": func(s string, i, j int) string {
+			if i >= len(s) {
+				return s
+			}
+			if j >= len(s) {
+				j = len(s)
+			}
+			return s[i:j]
 		},
 		"formatProxyName": formatProxyName,
 		"latencyColor":    generateLatencyColor,
@@ -661,6 +970,7 @@ func NewHTMLReporter(outputPath string, enableUnlock bool, configPath string, to
 	return reporter, nil
 }
 
+// AddResult adds a new result to the reporter
 func (r *HTMLReporter) AddResult(result *Result) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
@@ -695,7 +1005,7 @@ func (r *HTMLReporter) AddResult(result *Result) error {
 	return nil
 }
 
-// FormatLocation 格式化地理位置信息
+// FormatLocation formats location information
 func FormatLocation(location string) template.HTML {
 	if location == "N/A" {
 		return template.HTML(fmt.Sprintf(`<div class="location-container"><span class="location-tag bg-danger">%s</span></div>`, location))
@@ -710,50 +1020,34 @@ func FormatLocation(location string) template.HTML {
 	if len(parts) > 1 {
 		country := parts[0]
 		riskParts := strings.Split(strings.Trim(parts[1], "[]"), " ")
-		var riskValue, riskLevel string
-		if len(riskParts) > 0 {
+		var riskValue string
+		if len(riskParts) >= 1 {
 			riskValue = riskParts[0]
-			if len(riskParts) > 1 {
-				riskLevel = riskParts[1]
-			}
 		}
 
 		// 根据风险值设置不同的颜色
 		var riskClass string
-		if riskValue == "--" {
-			riskClass = "bg-danger" // 非常差
-		} else {
-			// 根据风险等级文本直接判断
-			switch {
-			case strings.Contains(riskLevel, "纯净"):
-				riskClass = "bg-success"
-			case strings.Contains(riskLevel, "一般"):
-				riskClass = "bg-warning"
-			case strings.Contains(riskLevel, "较差") || strings.Contains(riskLevel, "非常差"):
-				riskClass = "bg-danger"
-			default:
-				// 如果没匹配到风险等级，使用红色
-				riskClass = "bg-danger"
-			}
-		}
-
-		// 如果有风险等级，显示 "风险值 风险等级"，否则只显示风险值
 		var riskText string
-		if riskLevel != "" {
-			switch riskLevel {
-			case "纯净":
-				riskText = fmt.Sprintf("%s&nbsp;&nbsp;纯净", riskValue)
-			case "一般":
-				riskText = fmt.Sprintf("%s&nbsp;&nbsp;一般", riskValue)
-			case "较差":
-				riskText = fmt.Sprintf("%s&nbsp;&nbsp;较差", riskValue)
-			case "非常差":
-				riskText = "--&nbsp;&nbsp;非常差"
-			default:
-				riskText = fmt.Sprintf("%s&nbsp;&nbsp;%s", riskValue, riskLevel)
+
+		switch {
+		case riskValue == "0":
+			riskClass = "bg-success" // 纯净
+			riskText = fmt.Sprintf("%s 纯净", riskValue)
+		case riskValue == "100" || riskValue == "--":
+			riskClass = "bg-danger" // 非常差
+			riskText = fmt.Sprintf("%s 非常差", riskValue)
+		case riskValue == "":
+			riskClass = "bg-danger" // 未知
+			riskText = "未知"
+		default:
+			riskVal, _ := strconv.ParseFloat(riskValue, 64)
+			if riskVal < 66 {
+				riskClass = "bg-warning" // 一般
+				riskText = fmt.Sprintf("%s 一般", riskValue)
+			} else {
+				riskClass = "bg-danger" // 较差
+				riskText = fmt.Sprintf("%s 较差", riskValue)
 			}
-		} else {
-			riskText = riskValue
 		}
 
 		return template.HTML(fmt.Sprintf(`<div class="location-container"><span class="location-tag">%s</span><span class="risk-tag %s">%s</span></div>`,
@@ -763,7 +1057,7 @@ func FormatLocation(location string) template.HTML {
 	return template.HTML(fmt.Sprintf(`<div class="location-container"><span class="location-tag">%s</span></div>`, strings.TrimSpace(location)))
 }
 
-// ParseStreamUnlock 解析流媒体解锁信息
+// ParseStreamUnlock parses stream unlock information
 func ParseStreamUnlock(unlock string) []Platform {
 	if unlock == "N/A" {
 		return nil
@@ -866,7 +1160,7 @@ func generateRandomColor(name string) template.CSS {
 	return template.CSS(fmt.Sprintf("background-color: %s; color: %s", color.bg, color.fg))
 }
 
-// 格式化代理名称，将国家代码转换为国旗图标
+// 格式化代理名称，将国家代码转为国旗图标
 func formatProxyName(name string) template.HTML {
 	// 国家代码映射
 	countryFlags := map[string]string{
@@ -893,7 +1187,7 @@ func formatProxyName(name string) template.HTML {
 		"🇩🇪": "de", "DE": "de", "de": "de", // 德国
 		"🇮🇹": "it", "IT": "it", "it": "it", // 意大利
 		"🇪🇸": "es", "ES": "es", "es": "es", // 西班牙
-		"🇳🇱": "nl", "NL": "nl", "nl": "nl", // 荷兰
+		"🇱🇺": "nl", "NL": "nl", "nl": "nl", // 荷兰
 		"🇷🇺": "ru", "RU": "ru", "ru": "ru", // 俄罗斯
 		"🇨🇭": "ch", "CH": "ch", "ch": "ch", // 瑞士
 		"🇸🇪": "se", "SE": "se", "se": "se", // 瑞典
@@ -941,7 +1235,7 @@ func formatProxyName(name string) template.HTML {
 		}
 	}
 
-	// 3. 如果都没找到，返回带样式的原始文本
+	// 3. 如果没有找到，返回带样式的原始文本
 	color := generateRandomColor(name)
 	return template.HTML(fmt.Sprintf(`<span class="proxy-name" style="%s">%s</span>`, color, name))
 }
