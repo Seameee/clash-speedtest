@@ -142,7 +142,7 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 			switch p.Type() {
 			case constant.Shadowsocks, constant.ShadowsocksR, constant.Snell, constant.Socks5, constant.Http,
 				constant.Vmess, constant.Vless, constant.Trojan, constant.Hysteria, constant.Hysteria2,
-				constant.WireGuard, constant.Tuic, constant.Ssh:
+				constant.WireGuard, constant.Tuic, constant.Ssh, constant.AnyTLS:
 			default:
 				continue
 			}
